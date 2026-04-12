@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -p tsconfig.json && vite build",
+    "preview": "vite build && vite preview --host 0.0.0.0",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "jest --config jest.config.cjs --runInBand"
   },
