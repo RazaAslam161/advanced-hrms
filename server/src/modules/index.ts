@@ -1,0 +1,33 @@
+import { Router } from 'express';
+import { authRouter } from './auth/routes';
+import { employeeRouter } from './employee/routes';
+import { departmentRouter } from './department/routes';
+import { attendanceRouter } from './attendance/routes';
+import { leaveRouter } from './leave/routes';
+import { payrollRouter } from './payroll/routes';
+import { performanceRouter } from './performance/routes';
+import { recruitmentPublicRouter, recruitmentRouter } from './recruitment/routes';
+import { analyticsRouter } from './analytics/routes';
+import { notificationRouter } from './notification/routes';
+import { pulseRouter } from './pulse/routes';
+import { gigRouter } from './gig/routes';
+import { announcementRouter } from './announcement/routes';
+import { projectRouter } from './project/routes';
+
+export const apiRouter = Router();
+
+apiRouter.use('/auth', authRouter);
+apiRouter.use('/employees', employeeRouter);
+apiRouter.use('/departments', departmentRouter);
+apiRouter.use('/attendance', attendanceRouter);
+apiRouter.use('/leave', leaveRouter);
+apiRouter.use('/payroll', payrollRouter);
+apiRouter.use('/performance', performanceRouter);
+apiRouter.use('/recruitment/public', recruitmentPublicRouter);
+apiRouter.use('/recruitment', recruitmentRouter);
+apiRouter.use('/analytics', analyticsRouter);
+apiRouter.use('/notifications', notificationRouter);
+apiRouter.use('/pulse', pulseRouter);
+apiRouter.use('/gigs', gigRouter);
+apiRouter.use('/announcements', announcementRouter);
+apiRouter.use('/projects', projectRouter);

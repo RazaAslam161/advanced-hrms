@@ -1,0 +1,56 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+  --color-base: #16101f;
+  --color-surface: #1b1337;
+  --color-panel: #2a224a;
+  --color-primary: #7f63f4;
+  --color-secondary: #9a85ff;
+  --color-accent: #ffc107;
+  --color-ink: #140a25;
+  --color-text: #f5f1ff;
+  --color-muted: #a8a2c5;
+}
+
+html {
+  background: var(--color-base);
+}
+
+body {
+  font-family: 'Outfit', 'Segoe UI', sans-serif;
+  background:
+    radial-gradient(circle at top left, rgba(127, 99, 244, 0.34), transparent 24%),
+    radial-gradient(circle at 80% 10%, rgba(255, 193, 7, 0.16), transparent 18%),
+    radial-gradient(circle at bottom right, rgba(154, 133, 255, 0.18), transparent 30%),
+    linear-gradient(180deg, #16101f 0%, #1b1337 40%, #120b24 100%);
+  color: var(--color-text);
+  min-height: 100vh;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: 'Space Grotesk', 'Outfit', sans-serif;
+  letter-spacing: -0.03em;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+::selection {
+  background: rgba(127, 99, 244, 0.35);
+  color: #fff;
+}
+
+.dark {
+  color-scheme: dark;
+}

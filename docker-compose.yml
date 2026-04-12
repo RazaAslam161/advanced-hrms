@@ -1,0 +1,47 @@
+version: "3.9"
+
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  redis:
+    image: redis:7
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+
+  server:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    depends_on:
+      - mongo
+      - redis
+    ports:
+      - "4001:4001"
+    environment:
+      NODE_ENV: development
+      PORT: 4001
+      CLIENT_URL: http://localhost:5173
+      MONGODB_URI: mongodb://mongo:27017/nexus-hrms
+      REDIS_URL: redis://redis:6379
+      QUEUE_DRIVER: bullmq
+      FILE_STORAGE_DRIVER: local
+      UPLOAD_DIR: /app/server/uploads
+      LOG_LEVEL: info
+      ACCESS_TOKEN_TTL: 15m
+      REFRESH_TOKEN_TTL: 7d
+      COOKIE_SECRET: nexus-cookie-secret
+      SMTP_HOST: mailhog
+      SMTP_PORT: 1025
+      SMTP_FROM: noreply@metalabstech.com
+    volumes:
+      - ./server/uploads:/app/server/uploads
+
+volumes:
+  mongo_data:
