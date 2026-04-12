@@ -5,7 +5,11 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
 
   return {
-    plugins: [react()],
+    plugins: [
+      react({
+        jsxImportSource: 'react',
+      }),
+    ],
     define: {
       'import.meta.env.VITE_API_URL': JSON.stringify(env.VITE_API_URL),
     },
