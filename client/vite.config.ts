@@ -8,6 +8,7 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react({
         jsxImportSource: 'react',
+        fastRefresh: false,
       }),
     ],
     define: {
