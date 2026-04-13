@@ -1,3 +1,4 @@
+"start": "node dist/server.js"
 {
   "name": "@nexus/server",
   "version": "1.0.0",
