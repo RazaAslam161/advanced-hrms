@@ -5,6 +5,7 @@ COPY package*.json ./
 RUN npm install
 
 COPY . .
+COPY ../tsconfig.base.json ./tsconfig.base.json
 RUN npm run build
 
 FROM node:20-alpine
