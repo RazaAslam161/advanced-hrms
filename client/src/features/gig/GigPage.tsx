@@ -34,6 +34,8 @@ export const GigPage = () => {
   const queryClient = useQueryClient();
   const user = useAuthStore((state) => state.user);
   const [editingGigId, setEditingGigId] = useState<string | null>(null);
+  const [activeApplyGigId, setActiveApplyGigId] = useState<string | null>(null);
+  const [lastAppliedGigId, setLastAppliedGigId] = useState<string | null>(null);
   const canManageGigs = hasAnyPermission(user?.permissions, ['gigs.create', 'gigs.manage']);
   const canApplyToGigs = hasPermission(user?.permissions, 'gigs.read');
   const form = useForm<GigFormValues>({
@@ -109,8 +111,15 @@ export const GigPage = () => {
     mutationFn: async (id: string) => {
       await api.post(`/gigs/${id}/apply`);
     },
-    onSuccess: () => {
+    onMutate: (id) => {
+      setActiveApplyGigId(id);
+    },
+    onSuccess: (_data, id) => {
+      setLastAppliedGigId(id);
       queryClient.invalidateQueries({ queryKey: ['gigs'] });
+    },
+    onSettled: () => {
+      setActiveApplyGigId(null);
     },
   });
 
@@ -196,6 +205,8 @@ export const GigPage = () => {
         <Card className="space-y-2">
           <h3 className="text-lg font-semibold text-white">Internal gigs</h3>
           <p className="text-sm text-white/60">Employees can browse open collaborations here and register interest directly from the table.</p>
+          {applyMutation.isSuccess && lastAppliedGigId ? <p className="text-sm text-emerald-400">Interest recorded successfully for the selected gig.</p> : null}
+          {mutationError ? <p className="text-sm text-rose-300">{mutationError}</p> : null}
         </Card>
       )}
       <DataTable
@@ -209,8 +220,9 @@ export const GigPage = () => {
           {
             key: 'actions',
             header: 'Actions',
-            render: (item) =>
-              canManageGigs ? (
+            render: (item) => {
+              const hasApplied = item.applicants?.some((applicant) => applicant._id === meQuery.data?._id) ?? false;
+              return canManageGigs ? (
                 <div className="flex flex-wrap gap-2">
                   <Button type="button" variant="outline" soundTone="none" onClick={() => startEditing({ _id: item._id, title: item.title, description: item.description, ownerId: item.ownerId?._id ?? meQuery.data!._id, status: item.status })}>
                     Edit
@@ -226,11 +238,12 @@ export const GigPage = () => {
                 <Button
                   type="button"
                   onClick={() => applyMutation.mutate(item._id)}
-                  disabled={applyMutation.isPending || item.status !== 'open' || !canApplyToGigs}
+                  disabled={applyMutation.isPending || item.status !== 'open' || !canApplyToGigs || hasApplied}
                 >
-                  {item.status === 'open' ? 'Apply' : 'Closed'}
+                  {item.status !== 'open' ? 'Closed' : hasApplied ? 'Applied' : applyMutation.isPending && activeApplyGigId === item._id ? 'Applying...' : 'Apply'}
                 </Button>
-              ),
+              );
+            },
           },
         ]}
       />

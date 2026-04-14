@@ -1,5 +1,8 @@
+import fs from 'fs/promises';
+import path from 'path';
 import request from 'supertest';
 import { createApp } from './app';
+import { env } from './config/env';
 
 describe('NEXUS API', () => {
   it('returns health payload', async () => {
@@ -23,5 +26,21 @@ describe('NEXUS API', () => {
     const response = await request(createApp()).get('/api/v1/departments');
     expect(response.status).toBe(401);
     expect(response.body.message).toBe('Authentication required');
+  });
+
+  it('serves uploaded assets with a cross-origin resource policy that allows portal rendering', async () => {
+    const relativeAssetPath = path.join('avatars', 'test-avatar.png');
+    const absoluteAssetPath = path.join(env.UPLOAD_DIR, relativeAssetPath);
+
+    await fs.mkdir(path.dirname(absoluteAssetPath), { recursive: true });
+    await fs.writeFile(absoluteAssetPath, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+X2uoAAAAASUVORK5CYII=', 'base64'));
+
+    try {
+      const response = await request(createApp()).get(`/uploads/${relativeAssetPath.replace(/\\/g, '/')}`);
+      expect(response.status).toBe(200);
+      expect(response.headers['cross-origin-resource-policy']).toBe('cross-origin');
+    } finally {
+      await fs.rm(absoluteAssetPath, { force: true });
+    }
   });
 });

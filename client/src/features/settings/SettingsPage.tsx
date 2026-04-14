@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useFieldArray, useForm } from 'react-hook-form';
 import { z } from 'zod';
@@ -33,6 +33,7 @@ import { UserAvatar } from '../../components/UserAvatar';
 import { useAuthStore } from '../../store/authStore';
 import { useUIStore } from '../../store/uiStore';
 import type { AccountActivity, AccountSession, Employee, NotificationPreferences } from '../../types';
+import { AvatarEditorModal } from './AvatarEditorModal';
 
 const sectionSchema = z.enum(['profile', 'account', 'security', 'notifications', 'preferences', 'privacy', 'activity', 'support']);
 type SettingsSection = z.infer<typeof sectionSchema>;
@@ -142,6 +143,7 @@ export const SettingsPage = () => {
   const clearSession = useAuthStore((state) => state.clearSession);
   const { darkMode, soundEnabled, toggleDarkMode, toggleSoundEnabled } = useUIStore();
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
+  const [selectedAvatarFile, setSelectedAvatarFile] = useState<File | null>(null);
   const requestedSection = searchParams.get('section');
   const activeSection = sectionSchema.safeParse(requestedSection).success
     ? (requestedSection as SettingsSection)
@@ -292,6 +294,7 @@ export const SettingsPage = () => {
       queryClient.invalidateQueries({ queryKey: ['current-profile'] });
       queryClient.invalidateQueries({ queryKey: ['employee-activity'] });
       queryClient.invalidateQueries({ queryKey: ['account-activity'] });
+      setSelectedAvatarFile(null);
     },
   });
 
@@ -469,11 +472,12 @@ export const SettingsPage = () => {
                     onChange={(event) => {
                       const file = event.target.files?.[0];
                       if (file) {
-                        updateAvatarMutation.mutate(file);
+                        setSelectedAvatarFile(file);
                       }
                       event.target.value = '';
                     }}
                   />
+                  <p className="text-xs text-white/45">You can crop, reposition, and frame the image before saving it.</p>
                   {avatarError ? <p className="text-sm text-rose-300">{avatarError}</p> : null}
                   {updateAvatarMutation.isSuccess || removeAvatarMutation.isSuccess ? (
                     <p className="text-sm text-emerald-300">Profile photo updated successfully.</p>
@@ -990,6 +994,21 @@ export const SettingsPage = () => {
           </div>
         ) : null}
       </div>
+
+      {selectedAvatarFile ? (
+        <AvatarEditorModal
+          file={selectedAvatarFile}
+          busy={updateAvatarMutation.isPending}
+          onClose={() => {
+            if (!updateAvatarMutation.isPending) {
+              setSelectedAvatarFile(null);
+            }
+          }}
+          onApply={async (file) => {
+            await updateAvatarMutation.mutateAsync(file);
+          }}
+        />
+      ) : null}
     </div>
   );
 };

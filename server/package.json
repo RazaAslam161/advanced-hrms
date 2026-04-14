@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "concurrently -k -n API,WEB -c blue,magenta \"tsx watch src/server.ts\" \"npm --prefix ../client run dev -- --host 0.0.0.0\"",
     "dev:api": "tsx watch src/server.ts",
+    "start": "node dist/server.js",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "jest --config jest.config.cjs --runInBand",

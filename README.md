@@ -90,6 +90,7 @@ npm run build
 - Database target: MongoDB Atlas.
 - Cache/queue target: Redis Cloud.
 - The GitHub Actions workflow runs typecheck, tests, and builds on each push or pull request.
+- Company handover document: [COMPANY_HANDOVER.md](./COMPANY_HANDOVER.md)
 
 ## Storage and queue defaults
 

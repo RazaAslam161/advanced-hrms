@@ -105,6 +105,7 @@ export const ProjectPage = () => {
 
   const departmentsQuery = useQuery({
     queryKey: ['departments-for-projects'],
+    enabled: canManageProjects,
     queryFn: async () => {
       const { data } = await api.get('/departments', { params: { limit: 100 } });
       return data.data as Department[];
@@ -178,7 +179,14 @@ export const ProjectPage = () => {
 
   const departmentSummaries = useMemo(() => {
     const projects = projectsQuery.data ?? [];
-    return departmentsQuery.data?.map((department) => {
+    const sourceDepartments =
+      departmentsQuery.data ??
+      projects
+        .map((project) => project.department)
+        .filter((department): department is Department => Boolean(department))
+        .filter((department, index, array) => array.findIndex((entry) => entry._id === department._id) === index);
+
+    return sourceDepartments.map((department) => {
       const departmentProjects = projects.filter((project) => project.department?._id === department._id);
       const activeProjects = departmentProjects.filter((project) => project.status !== 'completed').length;
       const memberCount = departmentProjects.reduce((count, project) => count + (project.memberIds?.length ?? 0), 0);
@@ -188,7 +196,7 @@ export const ProjectPage = () => {
         activeProjects,
         memberCount,
       };
-    }) ?? [];
+    });
   }, [departmentsQuery.data, projectsQuery.data]);
 
   const filteredProjects = useMemo(() => {
@@ -199,11 +207,11 @@ export const ProjectPage = () => {
     return projects.filter((project) => project.department?._id === activeDepartment);
   }, [activeDepartment, projectsQuery.data]);
 
-  if (projectsQuery.isLoading || departmentsQuery.isLoading || employeesQuery.isLoading) {
+  if (projectsQuery.isLoading || employeesQuery.isLoading || (canManageProjects && departmentsQuery.isLoading)) {
     return <LoadingState label="Loading project workspaces..." />;
   }
 
-  if (projectsQuery.isError || departmentsQuery.isError || employeesQuery.isError) {
+  if (projectsQuery.isError || employeesQuery.isError || (canManageProjects && departmentsQuery.isError)) {
     return <ErrorState label="Project workspaces could not be loaded." />;
   }
 
