@@ -4,6 +4,7 @@ import { connectDatabase } from '../config/db';
 import { logger } from '../common/utils/logger';
 import { hashPassword } from '../common/utils/password';
 import { UserModel, AuthSessionModel } from '../modules/auth/model';
+import { resolveRolePermissions } from '../modules/auth/service';
 import { DepartmentModel } from '../modules/department/model';
 import { EmployeeActivityModel, EmployeeModel } from '../modules/employee/model';
 import { AttendanceRecordModel, ShiftModel } from '../modules/attendance/model';
@@ -235,19 +236,11 @@ const createUserAndEmployee = async (
   const email =
     namedProfile?.email ?? `${role}.${firstName}.${lastName}.${index}@nexus.dev`.replace(/\s+/g, '').toLowerCase();
 
-  const permissionsByRole: Record<string, string[]> = {
-    superAdmin: ['auth.register', 'employees.read', 'employees.create', 'employees.update', 'employees.delete', 'employees.import', 'departments.read', 'departments.create', 'departments.update', 'departments.delete', 'departments.orgchart', 'attendance.read', 'attendance.checkin', 'attendance.checkout', 'attendance.manage', 'attendance.approve', 'leave.read', 'leave.apply', 'leave.approve', 'leave.manage', 'projects.read', 'projects.create', 'projects.update', 'projects.assign', 'projects.status', 'payroll.read', 'payroll.process', 'payroll.approve', 'payroll.export', 'performance.read', 'performance.manage', 'performance.feedback', 'performance.review', 'recruitment.read', 'recruitment.manage', 'recruitment.pipeline', 'analytics.read', 'analytics.reports', 'notifications.read', 'notifications.manage', 'pulse.read', 'pulse.respond', 'pulse.manage', 'gigs.read', 'gigs.create', 'gigs.manage', 'announcements.read', 'announcements.publish', 'announcements.manage'],
-    admin: ['auth.register', 'employees.read', 'employees.create', 'employees.update', 'employees.import', 'departments.read', 'departments.create', 'departments.update', 'departments.orgchart', 'attendance.read', 'attendance.checkin', 'attendance.checkout', 'attendance.manage', 'attendance.approve', 'leave.read', 'leave.apply', 'leave.approve', 'leave.manage', 'projects.read', 'projects.create', 'projects.update', 'projects.assign', 'projects.status', 'payroll.read', 'payroll.process', 'payroll.approve', 'payroll.export', 'performance.read', 'performance.manage', 'performance.feedback', 'performance.review', 'recruitment.read', 'recruitment.manage', 'recruitment.pipeline', 'analytics.read', 'analytics.reports', 'notifications.read', 'notifications.manage', 'pulse.read', 'pulse.manage', 'gigs.read', 'gigs.create', 'gigs.manage', 'announcements.read', 'announcements.publish', 'announcements.manage'],
-    manager: ['employees.read', 'departments.read', 'departments.orgchart', 'attendance.read', 'attendance.checkin', 'attendance.checkout', 'leave.read', 'leave.apply', 'leave.approve', 'projects.read', 'projects.create', 'projects.update', 'projects.assign', 'projects.status', 'payroll.read', 'performance.read', 'performance.review', 'notifications.read', 'announcements.read', 'gigs.read'],
-    employee: ['attendance.checkin', 'attendance.checkout', 'attendance.read', 'leave.apply', 'leave.read', 'payroll.read', 'projects.read', 'projects.status', 'notifications.read', 'announcements.read', 'pulse.respond', 'pulse.read', 'gigs.read'],
-    recruiter: ['recruitment.read', 'recruitment.manage', 'recruitment.pipeline', 'notifications.read', 'announcements.read'],
-  };
-
   const user = await UserModel.create({
     email,
     password: await hashPassword('Meta@12345'),
     role,
-    permissions: permissionsByRole[role],
+    permissions: resolveRolePermissions(role),
     isActive: true,
     firstName,
     lastName,

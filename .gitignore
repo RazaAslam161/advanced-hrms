@@ -9,6 +9,7 @@ Thumbs.db
 uploads
 server/logs
 server/uploads
+server/.runtime
 client/dist
 package-lock.json
 *.log

@@ -15,7 +15,7 @@ export const getBalances = asyncHandler(async (req: AuthenticatedRequest, res: R
 });
 
 export const applyLeave = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-  const request = await LeaveService.apply(req.user!.userId, req.body);
+  const request = await LeaveService.apply(req.user!, req.body);
   res.status(201).json(sendSuccess('Leave request submitted successfully', request));
 });
 

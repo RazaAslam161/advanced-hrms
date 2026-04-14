@@ -19,6 +19,11 @@ export const updateGig = asyncHandler(async (req: Request, res: Response) => {
   res.json(sendSuccess('Gig updated successfully', gig));
 });
 
+export const deleteGig = asyncHandler(async (req: Request, res: Response) => {
+  const gig = await GigService.remove(String(req.params.id));
+  res.json(sendSuccess('Gig deleted successfully', gig));
+});
+
 export const applyToGig = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const gig = await GigService.apply(String(req.params.id), req.user!.userId);
   res.json(sendSuccess('Gig interest recorded successfully', gig));

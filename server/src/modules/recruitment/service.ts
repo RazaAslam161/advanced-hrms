@@ -63,6 +63,15 @@ export class RecruitmentService {
     return job;
   }
 
+  static async deleteJob(id: string) {
+    const job = await JobPostModel.findByIdAndDelete(id);
+    if (!job) {
+      throw new AppError('Job post not found', 404);
+    }
+    await ApplicationModel.deleteMany({ jobPostId: job._id });
+    return job;
+  }
+
   static async submitApplication(
     payload: { jobPostId: string; name: string; email: string; phone?: string; coverLetter?: string },
     file?: Express.Multer.File,

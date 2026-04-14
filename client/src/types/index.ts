@@ -18,6 +18,8 @@ export interface User {
   permissions: string[];
   firstName: string;
   lastName: string;
+  isActive?: boolean;
+  lastLogin?: string | null;
   mfaEnabled?: boolean;
   mustChangePassword?: boolean;
 }
@@ -28,11 +30,19 @@ export interface Employee {
   firstName: string;
   lastName: string;
   email: string;
+  displayName?: string;
+  avatar?: string;
+  phone?: string;
+  role?: 'superAdmin' | 'admin' | 'manager' | 'employee' | 'recruiter';
   designation: string;
   status: string;
   employmentType: string;
+  joiningDate?: string;
+  timezone?: string;
   workLocation: string;
   country: string;
+  department?: { _id: string; name: string; code: string };
+  reportingTo?: { _id: string; employeeId: string; firstName: string; lastName: string; designation: string };
   salary: {
     basic: number;
     houseRent: number;
@@ -41,6 +51,12 @@ export interface Employee {
     currency: string;
     bonus: number;
   };
+  emergencyContacts?: Array<{ name: string; relation: string; phone: string }>;
+  bankDetails?: {
+    bankName?: string;
+    accountNo?: string;
+    iban?: string;
+  };
 }
 
 export interface Department {
@@ -48,6 +64,9 @@ export interface Department {
   name: string;
   code: string;
   status: string;
+  description?: string;
+  head?: { _id: string; firstName: string; lastName: string };
+  parentDepartment?: { _id: string; name: string; code: string };
 }
 
 export interface DashboardMetric {
@@ -89,4 +108,34 @@ export interface Project {
   managerId?: ProjectMember;
   memberIds?: ProjectMember[];
   updates?: ProjectUpdate[];
+}
+
+export interface NotificationPreferences {
+  preferences: {
+    leave: { email: boolean; inApp: boolean };
+    payroll: { email: boolean; inApp: boolean };
+    review: { email: boolean; inApp: boolean };
+    announcement: { email: boolean; inApp: boolean };
+    system: { email: boolean; inApp: boolean };
+  };
+}
+
+export interface AccountSession {
+  id: string;
+  userAgent?: string | null;
+  ipAddress?: string | null;
+  createdAt?: string;
+  expiresAt: string;
+  revokedAt?: string | null;
+  active: boolean;
+}
+
+export interface AccountActivity {
+  _id: string;
+  module: string;
+  action: string;
+  entityType: string;
+  entityId?: string;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
 }

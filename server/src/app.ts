@@ -27,7 +27,14 @@ export const createApp = (): express.Express => {
   app.use(cookieParser(env.COOKIE_SECRET));
   app.use(mongoSanitize());
   app.use(generalRateLimiter);
-  app.use('/uploads', express.static(path.resolve(env.UPLOAD_DIR)));
+  app.use(
+    '/uploads',
+    express.static(path.resolve(env.UPLOAD_DIR), {
+      setHeaders: (res) => {
+        res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+      },
+    }),
+  );
 
   app.get('/health', (_req, res) => {
     res.json({ success: true, message: 'Service is healthy', data: { uptime: process.uptime() } });

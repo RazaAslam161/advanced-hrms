@@ -63,6 +63,22 @@ export const changePassword = asyncHandler(async (req: AuthenticatedRequest, res
   res.json(sendSuccess('Password updated successfully', result));
 });
 
+export const listMySessions = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const sessions = await AuthService.listMySessions(req.user!.userId);
+  res.json(sendSuccess('Sessions fetched successfully', sessions));
+});
+
+export const listMyActivity = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const activity = await AuthService.listMyActivity(req.user!.userId);
+  res.json(sendSuccess('Account activity fetched successfully', activity));
+});
+
+export const logoutAll = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const result = await AuthService.logoutAll(req.user!.userId);
+  res.clearCookie('refreshToken');
+  res.json(sendSuccess('Logged out from all devices successfully', result));
+});
+
 export const listUsers = asyncHandler(async (_req: AuthenticatedRequest, res: Response) => {
   const users = await AuthService.listUsers();
   res.json(sendSuccess('Users fetched successfully', users));
@@ -71,6 +87,11 @@ export const listUsers = asyncHandler(async (_req: AuthenticatedRequest, res: Re
 export const resetPassword = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const result = await AuthService.resetPassword(String(req.params.id));
   res.json(sendSuccess('Temporary password issued successfully', result));
+});
+
+export const updateUserAccess = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const result = await AuthService.updateUserAccess(String(req.params.id), req.body);
+  res.json(sendSuccess('User access updated successfully', result));
 });
 
 export const transferSuperAdmin = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {

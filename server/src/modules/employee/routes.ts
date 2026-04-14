@@ -9,20 +9,28 @@ import {
   employeeDirectory,
   deleteEmployee,
   getEmployee,
+  getMyEmployeeActivity,
   getMyEmployeeProfile,
   getEmployeeTimeline,
   listEmployees,
+  removeMyEmployeeAvatar,
+  updateMyEmployeeProfile,
   updateEmployee,
+  uploadMyEmployeeAvatar,
   uploadEmployeeAvatar,
   uploadEmployeeDocument,
 } from './controller';
-import { employeeBodySchema, employeeDocumentSchema, employeeQuerySchema } from './validators';
+import { employeeBodySchema, employeeDocumentSchema, employeeQuerySchema, employeeSelfProfileSchema } from './validators';
 
 const router = Router();
 
 router.use(authenticate);
 router.get('/directory', authorize(['superAdmin', 'admin', 'manager', 'employee', 'recruiter'], []), employeeDirectory);
 router.get('/me', authorize(['superAdmin', 'admin', 'manager', 'employee', 'recruiter'], []), getMyEmployeeProfile);
+router.patch('/me', authorize(['superAdmin', 'admin', 'manager', 'employee', 'recruiter'], []), validate({ body: employeeSelfProfileSchema }), updateMyEmployeeProfile);
+router.get('/me/activity', authorize(['superAdmin', 'admin', 'manager', 'employee', 'recruiter'], []), getMyEmployeeActivity);
+router.post('/me/avatar', authorize(['superAdmin', 'admin', 'manager', 'employee', 'recruiter'], []), singleUpload('file'), uploadMyEmployeeAvatar);
+router.delete('/me/avatar', authorize(['superAdmin', 'admin', 'manager', 'employee', 'recruiter'], []), removeMyEmployeeAvatar);
 router.post('/bulk-import', authorize(['superAdmin', 'admin'], ['employees.import']), singleUpload('file'), bulkImportEmployees);
 router.get('/', authorize(['superAdmin', 'admin', 'manager'], ['employees.read']), validate({ query: employeeQuerySchema }), listEmployees);
 router.get('/:id', authorize(['superAdmin', 'admin', 'manager'], ['employees.read']), getEmployee);

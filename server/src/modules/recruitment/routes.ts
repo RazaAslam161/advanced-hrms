@@ -5,6 +5,7 @@ import { singleUpload } from '../../common/middleware/upload';
 import { validate } from '../../common/middleware/validate';
 import {
   createJob,
+  deleteJob,
   createOffer,
   getJob,
   getOfferPdf,
@@ -33,6 +34,7 @@ router.get('/jobs', authorize(['superAdmin', 'admin', 'recruiter'], ['recruitmen
 router.get('/jobs/:id', authorize(['superAdmin', 'admin', 'recruiter'], ['recruitment.read']), getJob);
 router.post('/jobs', authorize(['superAdmin', 'admin', 'recruiter'], ['recruitment.manage']), validate({ body: jobPostSchema }), createJob);
 router.patch('/jobs/:id', authorize(['superAdmin', 'admin', 'recruiter'], ['recruitment.manage']), validate({ body: jobPostSchema.partial() }), updateJob);
+router.delete('/jobs/:id', authorize(['superAdmin', 'admin', 'recruiter'], ['recruitment.manage']), deleteJob);
 router.get('/applications', authorize(['superAdmin', 'admin', 'recruiter'], ['recruitment.read']), listApplications);
 router.patch('/applications/:id/stage', authorize(['superAdmin', 'admin', 'recruiter'], ['recruitment.pipeline']), validate({ body: applicationStageSchema }), moveApplication);
 router.post('/interviews', authorize(['superAdmin', 'admin', 'recruiter'], ['recruitment.manage']), validate({ body: interviewSchema }), scheduleInterview);

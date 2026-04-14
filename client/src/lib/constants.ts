@@ -13,6 +13,7 @@ import {
   Megaphone,
   FolderKanban,
   Sparkles,
+  Settings2,
   Users,
 } from 'lucide-react';
 import type { User } from '../types';
@@ -89,6 +90,7 @@ const navCatalog: NavItem[] = [
   { label: 'Pulse', slug: 'pulse', icon: Sparkles, roles: ['superAdmin', 'admin', 'employee'], permissions: ['pulse.read'] },
   { label: 'Gigs', slug: 'gigs', icon: CircleUserRound, roles: ['superAdmin', 'admin', 'manager', 'employee'], permissions: ['gigs.read'] },
   { label: 'Announcements', slug: 'announcements', icon: Megaphone, roles: ['superAdmin', 'admin', 'manager', 'employee', 'recruiter'], permissions: ['announcements.read'] },
+  { label: 'Settings', slug: 'settings', icon: Settings2, roles: ['superAdmin', 'admin', 'manager', 'employee', 'recruiter'] },
 ];
 
 export const getPortalConfig = (role?: UserRole | null) => (role ? portalConfigByRole[role] : null);

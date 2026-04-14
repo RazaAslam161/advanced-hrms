@@ -9,6 +9,7 @@ const employeeSchema = new Schema(
     displayName: { type: String, trim: true },
     email: { type: String, required: true, lowercase: true, index: true },
     avatar: { type: String },
+    phone: { type: String, trim: true },
     department: { type: Schema.Types.ObjectId, ref: 'Department', index: true },
     designation: { type: String, required: true },
     reportingTo: { type: Schema.Types.ObjectId, ref: 'Employee' },

@@ -18,6 +18,34 @@ export class PerformanceService {
     return ReviewCycleModel.find().sort({ startDate: -1 }).lean();
   }
 
+  static async updateCycle(id: string, payload: Record<string, unknown>) {
+    const updatePayload = Object.fromEntries(
+      Object.entries({
+        ...payload,
+        startDate: payload.startDate ? new Date(String(payload.startDate)) : undefined,
+        endDate: payload.endDate ? new Date(String(payload.endDate)) : undefined,
+      }).filter(([, value]) => value !== undefined),
+    );
+
+    const cycle = await ReviewCycleModel.findByIdAndUpdate(id, updatePayload, { new: true });
+    if (!cycle) {
+      throw new AppError('Review cycle not found', 404);
+    }
+    return cycle;
+  }
+
+  static async removeCycle(id: string) {
+    const cycle = await ReviewCycleModel.findByIdAndDelete(id);
+    if (!cycle) {
+      throw new AppError('Review cycle not found', 404);
+    }
+    await Promise.all([
+      FeedbackModel.deleteMany({ cycleId: cycle._id }),
+      PerformanceReviewModel.deleteMany({ cycleId: cycle._id }),
+    ]);
+    return cycle;
+  }
+
   static async createObjective(payload: Record<string, unknown>) {
     return ObjectiveModel.create(payload);
   }

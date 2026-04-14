@@ -23,6 +23,11 @@ export const updateJob = asyncHandler(async (req: Request, res: Response) => {
   res.json(sendSuccess('Job post updated successfully', job));
 });
 
+export const deleteJob = asyncHandler(async (req: Request, res: Response) => {
+  const job = await RecruitmentService.deleteJob(String(req.params.id));
+  res.json(sendSuccess('Job post deleted successfully', job));
+});
+
 export const publicCareers = asyncHandler(async (_req: Request, res: Response) => {
   const jobs = await RecruitmentService.listJobs(true);
   res.json(sendSuccess('Career opportunities fetched successfully', jobs));

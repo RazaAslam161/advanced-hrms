@@ -1,5 +1,6 @@
 import path from 'path';
 import fs from 'fs/promises';
+import { env } from '../../config/env';
 import { UserModel } from '../auth/model';
 import { hashPassword } from '../../common/utils/password';
 import { AppError } from '../../common/utils/appError';
@@ -29,6 +30,30 @@ const logActivity = async (employeeId: string, action: string, summary: string, 
   });
 };
 
+const resolveLocalUploadPath = (assetUrl?: string) => {
+  if (!assetUrl?.startsWith('/uploads/')) {
+    return null;
+  }
+
+  const relativePath = assetUrl.replace('/uploads/', '');
+  return path.resolve(env.UPLOAD_DIR, relativePath);
+};
+
+const removeStoredAsset = async (assetUrl?: string) => {
+  const fullPath = resolveLocalUploadPath(assetUrl);
+  if (!fullPath) {
+    return;
+  }
+
+  try {
+    await fs.unlink(fullPath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      throw error;
+    }
+  }
+};
+
 export class EmployeeService {
   static async directory() {
     return EmployeeModel.find({ isDeleted: false, status: { $in: ['active', 'probation'] } })
@@ -49,6 +74,63 @@ export class EmployeeService {
     }
 
     return employee;
+  }
+
+  static async updateSelf(
+    userId: string,
+    payload: {
+      firstName: string;
+      lastName: string;
+      displayName?: string;
+      email: string;
+      phone?: string;
+      timezone: string;
+      workLocation: string;
+      country: string;
+      emergencyContacts: Array<{ name: string; relation: string; phone: string }>;
+    },
+  ) {
+    const employee = await EmployeeModel.findOne({ userId, isDeleted: false });
+    if (!employee) {
+      throw new AppError('Employee profile not found', 404);
+    }
+
+    const normalizedEmail = payload.email.toLowerCase();
+    const existingUser = await UserModel.findOne({ email: normalizedEmail, _id: { $ne: employee.userId } });
+    if (existingUser) {
+      throw new AppError('A user with this email already exists', 409);
+    }
+
+    employee.firstName = payload.firstName;
+    employee.lastName = payload.lastName;
+    employee.displayName = payload.displayName;
+    employee.email = normalizedEmail;
+    employee.phone = payload.phone;
+    employee.timezone = payload.timezone;
+    employee.workLocation = payload.workLocation as 'onsite' | 'remote' | 'hybrid';
+    employee.country = payload.country;
+    employee.set('emergencyContacts', payload.emergencyContacts);
+    await employee.save();
+
+    await UserModel.updateOne(
+      { _id: employee.userId },
+      {
+        email: normalizedEmail,
+        firstName: payload.firstName,
+        lastName: payload.lastName,
+      },
+    );
+
+    await logActivity(employee.id, 'settings.profile.updated', 'Personal profile details updated', userId);
+    await createAuditLog({
+      actorId: userId,
+      module: 'settings',
+      action: 'profile.update',
+      entityType: 'Employee',
+      entityId: employee.id,
+    });
+
+    return this.getByUserId(userId);
   }
 
   static async list(query: {
@@ -113,6 +195,9 @@ export class EmployeeService {
     const generatedPassword = !payload.password ? generateTemporaryPassword() : undefined;
     const password = String(payload.password ?? generatedPassword);
 
+    const department = typeof payload.department === 'string' && payload.department.trim() ? payload.department : undefined;
+    const reportingTo = typeof payload.reportingTo === 'string' && payload.reportingTo.trim() ? payload.reportingTo : undefined;
+
     const user = await UserModel.create({
       email: String(payload.email).toLowerCase(),
       password: await hashPassword(password),
@@ -127,6 +212,8 @@ export class EmployeeService {
     const employee = await EmployeeModel.create({
       ...payload,
       email: String(payload.email).toLowerCase(),
+      department,
+      reportingTo,
       userId: user._id,
       employeeId: await generateEmployeeId(),
       joiningDate: new Date(String(payload.joiningDate)),
@@ -147,10 +234,17 @@ export class EmployeeService {
   }
 
   static async update(id: string, payload: Record<string, unknown>, actorId?: string) {
+    const department =
+      typeof payload.department === 'string' ? (payload.department.trim() ? payload.department : undefined) : payload.department;
+    const reportingTo =
+      typeof payload.reportingTo === 'string' ? (payload.reportingTo.trim() ? payload.reportingTo : undefined) : payload.reportingTo;
+
     const employee = await EmployeeModel.findOneAndUpdate(
       { _id: id, isDeleted: false },
       {
         ...payload,
+        department,
+        reportingTo,
         probationEndDate: payload.probationEndDate ? new Date(String(payload.probationEndDate)) : undefined,
       },
       { new: true },
@@ -219,6 +313,51 @@ export class EmployeeService {
     return employee;
   }
 
+  static async uploadMyAvatar(userId: string, file: Express.Multer.File) {
+    const employee = await EmployeeModel.findOne({ userId, isDeleted: false });
+    if (!employee) {
+      throw new AppError('Employee profile not found', 404);
+    }
+
+    const previousAvatar = employee.avatar;
+    const asset = await persistUpload(file, 'avatars', true);
+    employee.avatar = asset.url;
+    await employee.save();
+    await removeStoredAsset(previousAvatar ?? undefined);
+    await logActivity(employee.id, 'settings.avatar.updated', 'Profile photo updated', userId);
+    await createAuditLog({
+      actorId: userId,
+      module: 'settings',
+      action: 'avatar.update',
+      entityType: 'Employee',
+      entityId: employee.id,
+    });
+
+    return this.getByUserId(userId);
+  }
+
+  static async removeMyAvatar(userId: string) {
+    const employee = await EmployeeModel.findOne({ userId, isDeleted: false });
+    if (!employee) {
+      throw new AppError('Employee profile not found', 404);
+    }
+
+    const previousAvatar = employee.avatar;
+    employee.avatar = undefined;
+    await employee.save();
+    await removeStoredAsset(previousAvatar ?? undefined);
+    await logActivity(employee.id, 'settings.avatar.removed', 'Profile photo removed', userId);
+    await createAuditLog({
+      actorId: userId,
+      module: 'settings',
+      action: 'avatar.remove',
+      entityType: 'Employee',
+      entityId: employee.id,
+    });
+
+    return this.getByUserId(userId);
+  }
+
   static async uploadDocument(
     id: string,
     file: Express.Multer.File,
@@ -245,6 +384,15 @@ export class EmployeeService {
 
   static async timeline(id: string) {
     return EmployeeActivityModel.find({ employeeId: id }).sort({ occurredAt: -1 }).lean();
+  }
+
+  static async myTimeline(userId: string) {
+    const employee = await EmployeeModel.findOne({ userId, isDeleted: false }).select('_id').lean();
+    if (!employee) {
+      throw new AppError('Employee profile not found', 404);
+    }
+
+    return EmployeeActivityModel.find({ employeeId: employee._id }).sort({ occurredAt: -1 }).limit(20).lean();
   }
 
   static async bulkImport(file: Express.Multer.File, actorId?: string) {

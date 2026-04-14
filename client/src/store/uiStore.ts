@@ -14,15 +14,20 @@ interface UIState {
 
 const uiStorageKey = 'nexus-ui';
 
+const applyTheme = (darkMode: boolean) => {
+  document.documentElement.classList.toggle('dark', darkMode);
+  document.documentElement.classList.toggle('light', !darkMode);
+};
+
 export const useUIStore = create<UIState>((set, get) => ({
   sidebarOpen: true,
   darkMode: false,
-  soundEnabled: false,
+  soundEnabled: true,
   widgetOrder: ['headcount', 'attendance', 'leave', 'payroll'],
   toggleSidebar: () => set({ sidebarOpen: !get().sidebarOpen }),
   toggleDarkMode: () => {
     const darkMode = !get().darkMode;
-    document.documentElement.classList.toggle('dark', darkMode);
+    applyTheme(darkMode);
     localStorage.setItem(uiStorageKey, JSON.stringify({ ...get(), darkMode }));
     set({ darkMode });
   },
@@ -39,13 +44,13 @@ export const useUIStore = create<UIState>((set, get) => ({
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     const raw = localStorage.getItem(uiStorageKey);
     if (!raw) {
-      document.documentElement.classList.toggle('dark', prefersDark);
-      set({ darkMode: prefersDark });
+      applyTheme(prefersDark);
+      set({ darkMode: prefersDark, soundEnabled: true });
       return;
     }
     const parsed = JSON.parse(raw) as Partial<UIState>;
     const darkMode = parsed.darkMode ?? prefersDark;
-    document.documentElement.classList.toggle('dark', darkMode);
+    applyTheme(darkMode);
     set({
       sidebarOpen: parsed.sidebarOpen ?? true,
       darkMode,

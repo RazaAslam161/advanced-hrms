@@ -9,6 +9,7 @@ import { Button } from '../../components/ui/button';
 import { DataTable } from '../../components/DataTable';
 import { ErrorState, LoadingState } from '../../components/AsyncState';
 import { useAuthStore } from '../../store/authStore';
+import { hasAnyPermission } from '../../lib/permissions';
 import { formatCurrency, getApiErrorMessage, triggerBrowserDownload } from '../../lib/utils';
 
 const payrollRunSchema = z.object({
@@ -47,7 +48,7 @@ interface PayrollRecordRow {
 export const PayrollPage = () => {
   const queryClient = useQueryClient();
   const user = useAuthStore((state) => state.user);
-  const canProcessPayroll = user?.role === 'superAdmin' || user?.role === 'admin';
+  const canProcessPayroll = hasAnyPermission(user?.permissions, ['payroll.process', 'payroll.approve']);
   const form = useForm({
     resolver: zodResolver(payrollRunSchema),
     defaultValues: {

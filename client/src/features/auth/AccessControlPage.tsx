@@ -13,6 +13,7 @@ import { DataTable } from '../../components/DataTable';
 import { formatDate, getApiErrorMessage } from '../../lib/utils';
 import { useAuthStore } from '../../store/authStore';
 import type { Department } from '../../types';
+import { permissionGroups } from '../../lib/permissions';
 
 interface ManagedUser {
   id: string;
@@ -28,6 +29,14 @@ interface ManagedUser {
   createdAt: string;
 }
 
+const optionalStrongPassword = z
+  .string()
+  .trim()
+  .refine((value) => value.length === 0 || value.length >= 10, 'Password must be at least 10 characters')
+  .refine((value) => value.length === 0 || /[A-Z]/.test(value), 'Password must include an uppercase letter')
+  .refine((value) => value.length === 0 || /[a-z]/.test(value), 'Password must include a lowercase letter')
+  .refine((value) => value.length === 0 || /[0-9]/.test(value), 'Password must include a number');
+
 const accountSchema = z.object({
   firstName: z.string().min(2),
   lastName: z.string().min(2),
@@ -35,7 +44,7 @@ const accountSchema = z.object({
   role: z.enum(['superAdmin', 'admin', 'manager', 'employee', 'recruiter']),
   department: z.string().optional(),
   designation: z.string().min(2),
-  password: z.string().optional(),
+  password: optionalStrongPassword.optional(),
 });
 
 const transferSchema = z.object({
@@ -66,6 +75,9 @@ export const AccessControlPage = () => {
   const queryClient = useQueryClient();
   const auth = useAuthStore();
   const [issuedCredentials, setIssuedCredentials] = useState<{ email: string; password: string; label: string } | null>(null);
+  const [selectedUserId, setSelectedUserId] = useState<string>('');
+  const [selectedPermissions, setSelectedPermissions] = useState<string[]>([]);
+  const [selectedActive, setSelectedActive] = useState(true);
 
   const accountForm = useForm<AccountFormValues>({
     resolver: zodResolver(accountSchema),
@@ -114,12 +126,21 @@ export const AccessControlPage = () => {
     mutationFn: async (values: AccountFormValues) => {
       const { data } = await api.post('/auth/register', {
         ...values,
-        password: values.password?.trim() ? values.password : undefined,
+        department: values.department?.trim() ? values.department.trim() : undefined,
+        password: values.password?.trim() ? values.password.trim() : undefined,
       });
       return data.data as { user: ManagedUser; generatedPassword?: string };
     },
     onSuccess: (payload) => {
-      accountForm.reset();
+      accountForm.reset({
+        firstName: '',
+        lastName: '',
+        email: '',
+        role: 'employee',
+        department: '',
+        designation: 'Employee',
+        password: '',
+      });
       setIssuedCredentials(
         payload.generatedPassword
           ? {
@@ -148,6 +169,21 @@ export const AccessControlPage = () => {
     },
   });
 
+  const updateAccessMutation = useMutation({
+    mutationFn: async (payload: { id: string; permissions: string[]; isActive: boolean }) => {
+      const { data } = await api.patch(`/auth/users/${payload.id}`, {
+        permissions: payload.permissions,
+        isActive: payload.isActive,
+      });
+      return data.data as ManagedUser;
+    },
+    onSuccess: (payload) => {
+      queryClient.invalidateQueries({ queryKey: ['auth-users'] });
+      setSelectedPermissions(payload.permissions);
+      setSelectedActive(payload.isActive);
+    },
+  });
+
   const transferMutation = useMutation({
     mutationFn: async (values: TransferFormValues) => {
       const { data } = await api.post('/auth/transfer-super-admin', values);
@@ -169,6 +205,25 @@ export const AccessControlPage = () => {
     };
   }, [usersQuery.data]);
 
+  const selectedUser = useMemo(
+    () => (usersQuery.data ?? []).find((user) => user.id === selectedUserId) ?? null,
+    [selectedUserId, usersQuery.data],
+  );
+
+  useEffect(() => {
+    if (!selectedUserId && usersQuery.data?.length) {
+      setSelectedUserId(usersQuery.data[0].id);
+    }
+  }, [selectedUserId, usersQuery.data]);
+
+  useEffect(() => {
+    if (!selectedUser) {
+      return;
+    }
+    setSelectedPermissions(selectedUser.permissions);
+    setSelectedActive(selectedUser.isActive);
+  }, [selectedUser]);
+
   if (usersQuery.isLoading || departmentsQuery.isLoading) {
     return <LoadingState label="Loading access control workspace..." />;
   }
@@ -178,7 +233,16 @@ export const AccessControlPage = () => {
   }
 
   const createError = createAccountMutation.isError ? getApiErrorMessage(createAccountMutation.error, 'Account could not be created.') : null;
+  const accessError = updateAccessMutation.isError ? getApiErrorMessage(updateAccessMutation.error, 'Access changes could not be saved.') : null;
   const transferError = transferMutation.isError ? getApiErrorMessage(transferMutation.error, 'Authority transfer failed.') : null;
+
+  const togglePermission = (permission: string) => {
+    setSelectedPermissions((current) =>
+      current.includes(permission) ? current.filter((item) => item !== permission) : [...current, permission],
+    );
+  };
+
+  const canEditSelectedUser = selectedUser && !(selectedUser.role === 'superAdmin' && auth.user?.role !== 'superAdmin');
 
   return (
     <div className="space-y-6">
@@ -205,7 +269,7 @@ export const AccessControlPage = () => {
         </Card>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[1.1fr,0.9fr]">
+      <div className="grid gap-4 xl:grid-cols-[1.05fr,0.95fr]">
         <Card className="space-y-4">
           <div>
             <h3 className="text-lg font-semibold text-white">Provision unique login credentials</h3>
@@ -297,39 +361,130 @@ export const AccessControlPage = () => {
         </Card>
       </div>
 
-      <DataTable
-        title="Company Access Registry"
-        items={usersQuery.data ?? []}
-        columns={[
-          { key: 'name', header: 'User', render: (item) => `${item.firstName} ${item.lastName}` },
-          { key: 'email', header: 'Email' },
-          { key: 'role', header: 'Portal', render: (item) => roleLabels[item.role] },
-          { key: 'status', header: 'Status', render: (item) => <Badge>{item.isActive ? 'Active' : 'Disabled'}</Badge> },
-          { key: 'password', header: 'Password State', render: (item) => <Badge>{item.mustChangePassword ? 'Must change' : 'Current'}</Badge> },
-          {
-            key: 'lastLogin',
-            header: 'Last Login',
-            render: (item) => (item.lastLogin ? formatDate(item.lastLogin) : 'No login yet'),
-          },
-          {
-            key: 'actions',
-            header: 'Actions',
-            render: (item) => (
-              <div className="flex flex-wrap gap-2">
+      <div className="grid gap-4 xl:grid-cols-[1.1fr,0.9fr]">
+        <DataTable
+          title="Company Access Registry"
+          items={usersQuery.data ?? []}
+          columns={[
+            { key: 'name', header: 'User', render: (item) => `${item.firstName} ${item.lastName}` },
+            { key: 'email', header: 'Email' },
+            { key: 'role', header: 'Portal', render: (item) => roleLabels[item.role] },
+            { key: 'status', header: 'Status', render: (item) => <Badge>{item.isActive ? 'Active' : 'Disabled'}</Badge> },
+            { key: 'password', header: 'Password State', render: (item) => <Badge>{item.mustChangePassword ? 'Must change' : 'Current'}</Badge> },
+            {
+              key: 'lastLogin',
+              header: 'Last Login',
+              render: (item) => (item.lastLogin ? formatDate(item.lastLogin) : 'No login yet'),
+            },
+            {
+              key: 'actions',
+              header: 'Actions',
+              render: (item) => (
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" variant="outline" soundTone="none" onClick={() => setSelectedUserId(item.id)}>
+                    Manage access
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={resetPasswordMutation.isPending}
+                    onClick={() => resetPasswordMutation.mutate(item.id)}
+                  >
+                    Reset password
+                  </Button>
+                </div>
+              ),
+            },
+          ]}
+        />
+
+        <Card className="space-y-4">
+          <div>
+            <h3 className="text-lg font-semibold text-white">Account detail and permissions</h3>
+            <p className="text-sm text-white/55">Select an account from the registry to add or remove permissions and control whether the login stays active.</p>
+          </div>
+          {selectedUser ? (
+            <>
+              <div className="rounded-[1.3rem] border border-white/10 bg-white/5 p-4">
+                <p className="text-xs uppercase tracking-[0.24em] text-secondary">{roleLabels[selectedUser.role]}</p>
+                <p className="mt-2 text-lg font-semibold text-white">{selectedUser.firstName} {selectedUser.lastName}</p>
+                <p className="text-sm text-white/55">{selectedUser.email}</p>
+                <p className="mt-3 text-sm text-white/60">{selectedPermissions.length} permissions selected</p>
+              </div>
+
+              <label className="flex items-center justify-between rounded-[1.2rem] border border-white/10 bg-white/5 px-4 py-3 text-sm text-white">
+                <span>Account active</span>
+                <input
+                  type="checkbox"
+                  checked={selectedActive}
+                  disabled={selectedUser.role === 'superAdmin'}
+                  onChange={(event) => setSelectedActive(event.target.checked)}
+                  className="h-4 w-4 accent-[#7F63F4]"
+                />
+              </label>
+
+              <div className="max-h-[26rem] space-y-4 overflow-y-auto pr-2">
+                {Object.entries(permissionGroups).map(([group, permissions]) => (
+                  <div key={group} className="rounded-[1.2rem] border border-white/10 bg-white/5 p-4">
+                    <p className="text-xs uppercase tracking-[0.24em] text-secondary">{group}</p>
+                    <div className="mt-3 grid gap-2">
+                      {permissions.map((permission) => (
+                        <label key={permission} className="flex items-center gap-3 text-sm text-white/78">
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 accent-[#7F63F4]"
+                            checked={selectedPermissions.includes(permission)}
+                            disabled={!canEditSelectedUser}
+                            onChange={() => togglePermission(permission)}
+                          />
+                          <span>{permission}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex flex-wrap gap-3">
+                <Button
+                  type="button"
+                  disabled={!canEditSelectedUser || updateAccessMutation.isPending}
+                  onClick={() =>
+                    selectedUser &&
+                    updateAccessMutation.mutate({
+                      id: selectedUser.id,
+                      permissions: selectedPermissions,
+                      isActive: selectedActive,
+                    })
+                  }
+                >
+                  {updateAccessMutation.isPending ? 'Saving access...' : 'Save access changes'}
+                </Button>
                 <Button
                   type="button"
                   variant="outline"
-                  disabled={resetPasswordMutation.isPending}
-                  onClick={() => resetPasswordMutation.mutate(item.id)}
+                  soundTone="none"
+                  onClick={() => {
+                    if (!selectedUser) {
+                      return;
+                    }
+                    setSelectedPermissions(selectedUser.permissions);
+                    setSelectedActive(selectedUser.isActive);
+                  }}
                 >
-                  Reset password
+                  Reset changes
                 </Button>
-                <span className="self-center text-xs text-white/40">{item.permissions.length} permissions</span>
               </div>
-            ),
-          },
-        ]}
-      />
+              {updateAccessMutation.isSuccess ? <p className="text-sm text-emerald-300">Access settings updated successfully.</p> : null}
+              {accessError ? <p className="text-sm text-rose-300">{accessError}</p> : null}
+            </>
+          ) : (
+            <div className="rounded-[1.2rem] border border-dashed border-white/10 bg-white/[0.03] p-4 text-sm text-white/55">
+              Select an account from the registry to manage permissions.
+            </div>
+          )}
+        </Card>
+      </div>
     </div>
   );
 };

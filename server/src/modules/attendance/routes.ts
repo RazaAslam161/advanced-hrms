@@ -24,8 +24,8 @@ router.get('/dashboard', authorize(['superAdmin', 'admin', 'manager', 'employee'
 router.get('/shifts', authorize(['superAdmin', 'admin', 'manager'], ['attendance.read']), listShifts);
 router.post('/shifts', authorize(['superAdmin', 'admin'], ['attendance.manage']), validate({ body: shiftSchema }), createShift);
 router.patch('/shifts/:id', authorize(['superAdmin', 'admin'], ['attendance.manage']), validate({ body: shiftSchema.partial() }), updateShift);
-router.post('/check-in', authorize(['superAdmin', 'admin', 'manager', 'employee'], ['attendance.checkin']), validate({ body: attendanceActionSchema }), checkIn);
-router.post('/check-out', authorize(['superAdmin', 'admin', 'manager', 'employee'], ['attendance.checkout']), validate({ body: attendanceActionSchema }), checkOut);
+router.post('/check-in', authorize(['admin', 'manager', 'employee'], ['attendance.checkin']), validate({ body: attendanceActionSchema }), checkIn);
+router.post('/check-out', authorize(['admin', 'manager', 'employee'], ['attendance.checkout']), validate({ body: attendanceActionSchema }), checkOut);
 router.post('/overtime', authorize(['superAdmin', 'admin', 'manager', 'employee'], ['attendance.read']), validate({ body: overtimeRequestSchema }), requestOvertime);
 router.patch('/overtime/:id', authorize(['superAdmin', 'admin', 'manager'], ['attendance.approve']), approveOvertime);
 router.get('/monthly/:employeeId', authorize(['superAdmin', 'admin', 'manager', 'employee'], ['attendance.read']), monthlyAttendanceReport);

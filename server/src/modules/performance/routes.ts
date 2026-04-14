@@ -6,6 +6,7 @@ import {
   addKeyResult,
   createCycle,
   createObjective,
+  deleteCycle,
   createPip,
   createReview,
   listCycles,
@@ -14,9 +15,10 @@ import {
   listReviews,
   performanceDashboard,
   submitFeedback,
+  updateCycle,
   upsertKpiConfig,
 } from './controller';
-import { feedbackSchema, objectiveSchema, pipSchema, reviewCycleSchema, reviewSchema } from './validators';
+import { feedbackSchema, objectiveSchema, pipSchema, reviewCycleSchema, reviewCycleUpdateSchema, reviewSchema } from './validators';
 
 const router = Router();
 
@@ -24,6 +26,8 @@ router.use(authenticate);
 router.get('/dashboard', authorize(['superAdmin', 'admin', 'manager'], ['performance.read']), performanceDashboard);
 router.get('/cycles', authorize(['superAdmin', 'admin', 'manager', 'employee'], ['performance.read']), listCycles);
 router.post('/cycles', authorize(['superAdmin', 'admin'], ['performance.manage']), validate({ body: reviewCycleSchema }), createCycle);
+router.patch('/cycles/:id', authorize(['superAdmin', 'admin'], ['performance.manage']), validate({ body: reviewCycleUpdateSchema }), updateCycle);
+router.delete('/cycles/:id', authorize(['superAdmin', 'admin'], ['performance.manage']), deleteCycle);
 router.get('/objectives', authorize(['superAdmin', 'admin', 'manager', 'employee'], ['performance.read']), listObjectives);
 router.post('/objectives', authorize(['superAdmin', 'admin', 'manager'], ['performance.manage']), validate({ body: objectiveSchema }), createObjective);
 router.post('/objectives/:objectiveId/key-results', authorize(['superAdmin', 'admin', 'manager'], ['performance.manage']), addKeyResult);

@@ -5,16 +5,35 @@
 @tailwind utilities;
 
 :root {
-  color-scheme: dark;
-  --color-base: #16101f;
-  --color-surface: #1b1337;
-  --color-panel: #2a224a;
+  color-scheme: light;
+  --color-base: #625b7d;
+  --color-surface: #746c90;
+  --color-panel: #8a83a6;
   --color-primary: #7f63f4;
   --color-secondary: #9a85ff;
   --color-accent: #ffc107;
   --color-ink: #140a25;
   --color-text: #f5f1ff;
   --color-muted: #a8a2c5;
+  --body-glow-top: rgba(127, 99, 244, 0.12);
+  --body-glow-accent: rgba(255, 193, 7, 0.1);
+  --body-gradient-start: #7e779d;
+  --body-gradient-mid: #68617f;
+  --body-gradient-end: #57506f;
+  --grid-line: rgba(255, 255, 255, 0.04);
+}
+
+.dark {
+  color-scheme: dark;
+  --color-base: #16101f;
+  --color-surface: #1b1337;
+  --color-panel: #2a224a;
+  --body-glow-top: rgba(127, 99, 244, 0.08);
+  --body-glow-accent: rgba(255, 193, 7, 0.08);
+  --body-gradient-start: #16101f;
+  --body-gradient-mid: #19122d;
+  --body-gradient-end: #120d1f;
+  --grid-line: rgba(255, 255, 255, 0.03);
 }
 
 html {
@@ -24,12 +43,12 @@ html {
 body {
   font-family: 'Outfit', 'Segoe UI', sans-serif;
   background:
-    radial-gradient(circle at top left, rgba(127, 99, 244, 0.34), transparent 24%),
-    radial-gradient(circle at 80% 10%, rgba(255, 193, 7, 0.16), transparent 18%),
-    radial-gradient(circle at bottom right, rgba(154, 133, 255, 0.18), transparent 30%),
-    linear-gradient(180deg, #16101f 0%, #1b1337 40%, #120b24 100%);
+    linear-gradient(180deg, var(--body-glow-top) 0%, rgba(127, 99, 244, 0) 16%),
+    radial-gradient(circle at top right, var(--body-glow-accent), transparent 16%),
+    linear-gradient(180deg, var(--body-gradient-start) 0%, var(--body-gradient-mid) 48%, var(--body-gradient-end) 100%);
   color: var(--color-text);
   min-height: 100vh;
+  transition: background 240ms ease, color 240ms ease;
 }
 
 h1,
@@ -46,11 +65,53 @@ h6 {
   min-height: 100vh;
 }
 
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: 40px 40px;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.22), transparent 75%);
+  opacity: 0.4;
+}
+
+.surface-3d {
+  transform-style: preserve-3d;
+  transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease, background 180ms ease;
+  will-change: transform;
+}
+
+.surface-3d[data-tilting='true'] {
+  transform:
+    perspective(1200px)
+    rotateX(var(--card-rotate-x, 0deg))
+    rotateY(var(--card-rotate-y, 0deg))
+    translateY(-3px);
+}
+
+.surface-3d:hover {
+  box-shadow: 0 22px 50px rgba(8, 6, 18, 0.18);
+}
+
+.hero-float {
+  animation: heroFloat 6s ease-in-out infinite;
+  transform-origin: center;
+}
+
+@keyframes heroFloat {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) rotate3d(0, 0, 1, 0deg);
+  }
+  50% {
+    transform: translate3d(0, -8px, 0) rotate3d(0, 0, 1, -1deg);
+  }
+}
+
 ::selection {
   background: rgba(127, 99, 244, 0.35);
   color: #fff;
-}
-
-.dark {
-  color-scheme: dark;
 }

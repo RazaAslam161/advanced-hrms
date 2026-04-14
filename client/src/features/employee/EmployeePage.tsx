@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -10,6 +10,7 @@ import { Input } from '../../components/ui/input';
 import { Button } from '../../components/ui/button';
 import { ErrorState, LoadingState } from '../../components/AsyncState';
 import { Badge } from '../../components/ui/badge';
+import { hasAnyPermission } from '../../lib/permissions';
 import { formatCurrency, getApiErrorMessage, toIsoDateTime, toLocalDateTimeInputValue } from '../../lib/utils';
 import { useAuthStore } from '../../store/authStore';
 import type { Department, Employee } from '../../types';
@@ -23,6 +24,7 @@ const employeeSchema = z.object({
   designation: z.string().min(2),
   employmentType: z.enum(['full-time', 'part-time', 'contract', 'intern']),
   joiningDate: z.string().min(1),
+  status: z.enum(['active', 'probation', 'inactive', 'terminated']).default('active'),
   salary: z.object({
     basic: z.coerce.number().min(0),
     houseRent: z.coerce.number().min(0).default(0),
@@ -35,23 +37,27 @@ const employeeSchema = z.object({
 
 type EmployeeFormValues = z.infer<typeof employeeSchema>;
 
+const emptyFormValues = (): EmployeeFormValues => ({
+  firstName: '',
+  lastName: '',
+  email: '',
+  role: 'employee',
+  department: '',
+  designation: '',
+  employmentType: 'full-time',
+  joiningDate: toLocalDateTimeInputValue(new Date()),
+  status: 'active',
+  salary: { basic: 100000, houseRent: 0, medical: 0, transport: 0, currency: 'PKR', bonus: 0 },
+});
+
 export const EmployeePage = () => {
   const queryClient = useQueryClient();
   const user = useAuthStore((state) => state.user);
+  const [editingEmployeeId, setEditingEmployeeId] = useState<string | null>(null);
   const [issuedCredentials, setIssuedCredentials] = useState<{ email: string; password: string; role: string } | null>(null);
   const form = useForm<EmployeeFormValues>({
     resolver: zodResolver(employeeSchema),
-    defaultValues: {
-      firstName: '',
-      lastName: '',
-      email: '',
-      role: 'employee',
-      department: '',
-      designation: '',
-      employmentType: 'full-time',
-      joiningDate: toLocalDateTimeInputValue(new Date()),
-      salary: { basic: 100000, houseRent: 0, medical: 0, transport: 0, currency: 'PKR', bonus: 0 },
-    },
+    defaultValues: emptyFormValues(),
   });
 
   const employeesQuery = useQuery({
@@ -74,11 +80,11 @@ export const EmployeePage = () => {
     mutationFn: async (values: EmployeeFormValues) => {
       const { data } = await api.post('/employees', {
         ...values,
+        department: values.department?.trim() ? values.department.trim() : undefined,
         joiningDate: toIsoDateTime(values.joiningDate),
         timezone: 'Asia/Karachi',
         workLocation: 'onsite',
         country: 'Pakistan',
-        status: 'active',
         emergencyContacts: [],
         skills: [],
       });
@@ -92,7 +98,8 @@ export const EmployeePage = () => {
       };
     },
     onSuccess: (payload) => {
-      form.reset();
+      form.reset(emptyFormValues());
+      setEditingEmployeeId(null);
       setIssuedCredentials(
         payload.credentials.generatedPassword
           ? {
@@ -106,6 +113,42 @@ export const EmployeePage = () => {
     },
   });
 
+  const updateMutation = useMutation({
+    mutationFn: async (payload: { id: string; values: Partial<EmployeeFormValues> }) => {
+      const { data } = await api.patch(`/employees/${payload.id}`, payload.values);
+      return data.data as Employee;
+    },
+    onSuccess: () => {
+      form.reset(emptyFormValues());
+      setEditingEmployeeId(null);
+      queryClient.invalidateQueries({ queryKey: ['employees'] });
+    },
+  });
+
+  const archiveMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await api.delete(`/employees/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['employees'] });
+    },
+  });
+
+  const canManageEmployees = hasAnyPermission(user?.permissions, ['employees.create', 'employees.update', 'employees.delete']);
+
+  const mutationError = useMemo(() => {
+    if (createMutation.isError) {
+      return getApiErrorMessage(createMutation.error, 'Employee could not be created.');
+    }
+    if (updateMutation.isError) {
+      return getApiErrorMessage(updateMutation.error, 'Employee could not be updated.');
+    }
+    if (archiveMutation.isError) {
+      return getApiErrorMessage(archiveMutation.error, 'Employee could not be archived.');
+    }
+    return null;
+  }, [archiveMutation.error, archiveMutation.isError, createMutation.error, createMutation.isError, updateMutation.error, updateMutation.isError]);
+
   if (employeesQuery.isLoading || departmentsQuery.isLoading) {
     return <LoadingState label="Loading employee directory..." />;
   }
@@ -114,19 +157,62 @@ export const EmployeePage = () => {
     return <ErrorState label="Employee data could not be loaded." />;
   }
 
-  const mutationError = createMutation.isError ? getApiErrorMessage(createMutation.error, 'Employee could not be created.') : null;
-  const canCreateEmployees = user?.role === 'superAdmin' || user?.role === 'admin';
+  const applyEmployeeToForm = (employee: Employee) => {
+    setEditingEmployeeId(employee._id);
+    form.reset({
+      firstName: employee.firstName,
+      lastName: employee.lastName,
+      email: employee.email,
+      role: employee.role ?? 'employee',
+      department: employee.department?._id ?? '',
+      designation: employee.designation,
+      employmentType: employee.employmentType as EmployeeFormValues['employmentType'],
+      joiningDate: toLocalDateTimeInputValue(employee.joiningDate ?? new Date()),
+      status: (employee.status as EmployeeFormValues['status']) ?? 'active',
+      salary: {
+        basic: employee.salary?.basic ?? 0,
+        houseRent: employee.salary?.houseRent ?? 0,
+        medical: employee.salary?.medical ?? 0,
+        transport: employee.salary?.transport ?? 0,
+        currency: employee.salary?.currency ?? 'PKR',
+        bonus: employee.salary?.bonus ?? 0,
+      },
+    });
+    setIssuedCredentials(null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   return (
     <div className="space-y-6">
-      {canCreateEmployees ? (
+      {canManageEmployees ? (
         <div className="grid gap-4 xl:grid-cols-[1.15fr,0.85fr]">
           <Card className="space-y-4">
             <div>
-              <h3 className="text-lg font-semibold text-white">Add team member</h3>
-              <p className="text-sm text-white/55">Create the employee profile and issue unique portal credentials in one step.</p>
+              <h3 className="text-lg font-semibold text-white">{editingEmployeeId ? 'Edit team member' : 'Add team member'}</h3>
+              <p className="text-sm text-white/55">Create the employee profile, issue unique credentials, or update role and status from the same workspace.</p>
             </div>
-            <form className="grid gap-3 md:grid-cols-2 xl:grid-cols-3" onSubmit={form.handleSubmit((values) => createMutation.mutate(values))}>
+            <form
+              className="grid gap-3 md:grid-cols-2 xl:grid-cols-3"
+              onSubmit={form.handleSubmit((values) => {
+                const payload = {
+                  ...values,
+                  department: values.department?.trim() ? values.department.trim() : undefined,
+                  joiningDate: toIsoDateTime(values.joiningDate),
+                  timezone: 'Asia/Karachi',
+                  workLocation: 'onsite',
+                  country: 'Pakistan',
+                  emergencyContacts: [],
+                  skills: [],
+                };
+
+                if (editingEmployeeId) {
+                  updateMutation.mutate({ id: editingEmployeeId, values: payload });
+                  return;
+                }
+
+                createMutation.mutate(values);
+              })}
+            >
               <Input placeholder="First name" {...form.register('firstName')} />
               <Input placeholder="Last name" {...form.register('lastName')} />
               <Input placeholder="Work email" {...form.register('email')} />
@@ -151,15 +237,44 @@ export const EmployeePage = () => {
                 <option value="contract">Contract</option>
                 <option value="intern">Intern</option>
               </select>
+              <select className="w-full rounded-2xl border border-white/10 bg-white/6 px-4 py-3 text-sm text-white" {...form.register('status')}>
+                <option value="active">Active</option>
+                <option value="probation">Probation</option>
+                <option value="inactive">Inactive</option>
+                <option value="terminated">Terminated</option>
+              </select>
               <Input type="datetime-local" {...form.register('joiningDate')} />
               <Input type="number" placeholder="Basic salary" {...form.register('salary.basic')} />
-              <div className="md:col-span-2 xl:col-span-3">
-                <Button type="submit" disabled={createMutation.isPending}>
-                  {createMutation.isPending ? 'Saving employee...' : 'Create employee and credentials'}
+              <Input type="number" placeholder="House rent" {...form.register('salary.houseRent')} />
+              <Input type="number" placeholder="Medical" {...form.register('salary.medical')} />
+              <Input type="number" placeholder="Transport" {...form.register('salary.transport')} />
+              <div className="flex gap-3 md:col-span-2 xl:col-span-3">
+                <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending}>
+                  {editingEmployeeId
+                    ? updateMutation.isPending
+                      ? 'Saving employee...'
+                      : 'Save employee'
+                    : createMutation.isPending
+                      ? 'Saving employee...'
+                      : 'Create employee and credentials'}
                 </Button>
+                {editingEmployeeId ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    soundTone="none"
+                    onClick={() => {
+                      setEditingEmployeeId(null);
+                      form.reset(emptyFormValues());
+                    }}
+                  >
+                    Cancel edit
+                  </Button>
+                ) : null}
               </div>
             </form>
             {createMutation.isSuccess && <p className="text-sm text-emerald-300">Employee account created successfully.</p>}
+            {updateMutation.isSuccess && <p className="text-sm text-emerald-300">Employee profile updated successfully.</p>}
             {mutationError && <p className="text-sm text-rose-300">{mutationError}</p>}
           </Card>
           <Card className="space-y-4">
@@ -188,16 +303,50 @@ export const EmployeePage = () => {
           <p className="mt-2 text-sm text-white/55">Managers can review the directory here. Account creation is restricted to the Super Admin and HR portal.</p>
         </Card>
       )}
+
       <DataTable
         title="Employees"
         items={employeesQuery.data ?? []}
         columns={[
           { key: 'employeeId', header: 'Employee ID' },
           { key: 'fullName', header: 'Name', render: (item) => `${item.firstName} ${item.lastName}` },
+          { key: 'department', header: 'Department', render: (item) => item.department?.name ?? 'Not assigned' },
           { key: 'designation', header: 'Designation' },
           { key: 'status', header: 'Status', render: (item) => <Badge>{item.status}</Badge> },
           { key: 'employmentType', header: 'Type' },
           { key: 'salary', header: 'Basic Salary', render: (item) => formatCurrency(item.salary?.basic ?? 0, item.salary?.currency ?? 'PKR') },
+          {
+            key: 'actions',
+            header: 'Actions',
+            render: (item) =>
+              canManageEmployees ? (
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" variant="outline" soundTone="none" onClick={() => applyEmployeeToForm(item)}>
+                    Edit
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={updateMutation.isPending}
+                    onClick={() =>
+                      updateMutation.mutate({
+                        id: item._id,
+                        values: {
+                          status: item.status === 'active' ? 'inactive' : 'active',
+                        },
+                      })
+                    }
+                  >
+                    {item.status === 'active' ? 'Deactivate' : 'Activate'}
+                  </Button>
+                  <Button type="button" variant="outline" disabled={archiveMutation.isPending} onClick={() => archiveMutation.mutate(item._id)}>
+                    Archive
+                  </Button>
+                </div>
+              ) : (
+                <span className="text-xs text-white/45">View only</span>
+              ),
+          },
         ]}
       />
     </div>

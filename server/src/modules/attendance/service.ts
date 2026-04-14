@@ -91,7 +91,10 @@ export class AttendanceService {
     return record;
   }
 
-  static async list(query: { employeeId?: string; startDate?: string; endDate?: string; page?: string; limit?: string }, requester?: JwtUserPayload) {
+  static async list(
+    query: { employeeId?: string; startDate?: string; endDate?: string; department?: string; page?: string; limit?: string },
+    requester?: JwtUserPayload,
+  ) {
     let scopedEmployeeId = query.employeeId;
     if (requester?.role === 'employee') {
       const employee = await EmployeeModel.findOne({ userId: requester.userId, isDeleted: false }).select('_id');
@@ -119,7 +122,20 @@ export class AttendanceService {
       .populate('shiftId', 'name code startTime endTime')
       .lean();
 
-    return records;
+    const hydratedRecords = await EmployeeModel.populate(records, {
+      path: 'employeeId.department',
+      select: 'name code',
+    });
+
+    return hydratedRecords.filter((record) => {
+      if (!query.department) {
+        return true;
+      }
+
+      const employee = record.employeeId as unknown as { department?: { _id?: { toString(): string } | string } };
+      const departmentId = typeof employee.department?._id === 'string' ? employee.department._id : employee.department?._id?.toString();
+      return departmentId === query.department;
+    });
   }
 
   static async dashboard(_requester?: JwtUserPayload) {

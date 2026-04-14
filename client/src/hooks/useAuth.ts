@@ -5,8 +5,10 @@ export const useAuth = () => {
   const auth = useAuthStore();
 
   useEffect(() => {
-    auth.hydrate();
-  }, []);
+    if (!auth.hydrated) {
+      auth.hydrate();
+    }
+  }, [auth]);
 
   return auth;
 };

@@ -24,6 +24,11 @@ export const updateAnnouncement = asyncHandler(async (req: Request, res: Respons
   res.json(sendSuccess('Announcement updated successfully', announcement));
 });
 
+export const deleteAnnouncement = asyncHandler(async (req: Request, res: Response) => {
+  const announcement = await AnnouncementService.remove(String(req.params.id));
+  res.json(sendSuccess('Announcement deleted successfully', announcement));
+});
+
 export const markAnnouncementRead = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const announcement = await AnnouncementService.markRead(String(req.params.id), req.user!.userId);
   res.json(sendSuccess('Announcement marked as read', announcement));

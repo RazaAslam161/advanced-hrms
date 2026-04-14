@@ -13,6 +13,16 @@ export const listCycles = asyncHandler(async (_req: Request, res: Response) => {
   res.json(sendSuccess('Review cycles fetched successfully', cycles));
 });
 
+export const updateCycle = asyncHandler(async (req: Request, res: Response) => {
+  const cycle = await PerformanceService.updateCycle(String(req.params.id), req.body);
+  res.json(sendSuccess('Review cycle updated successfully', cycle));
+});
+
+export const deleteCycle = asyncHandler(async (req: Request, res: Response) => {
+  const cycle = await PerformanceService.removeCycle(String(req.params.id));
+  res.json(sendSuccess('Review cycle deleted successfully', cycle));
+});
+
 export const createObjective = asyncHandler(async (req: Request, res: Response) => {
   const objective = await PerformanceService.createObjective(req.body);
   res.status(201).json(sendSuccess('Objective created successfully', objective));

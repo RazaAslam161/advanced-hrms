@@ -6,10 +6,12 @@ import { v4 as uuid } from 'uuid';
 import { AppError } from '../../common/utils/appError';
 import { comparePassword, hashPassword } from '../../common/utils/password';
 import { allPermissions } from '../../common/constants/permissions';
+import { createAuditLog } from '../../common/utils/audit';
 import { AuthSessionModel, UserModel } from './model';
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../../common/utils/jwt';
 import type { Role } from '../../common/constants/roles';
 import { EmployeeModel } from '../employee/model';
+import { AuditLogModel } from '../analytics/model';
 
 export const roleDefaults: Record<Role, string[]> = {
   superAdmin: allPermissions,
@@ -18,10 +20,12 @@ export const roleDefaults: Record<Role, string[]> = {
     'employees.read',
     'employees.create',
     'employees.update',
+    'employees.delete',
     'employees.import',
     'departments.read',
     'departments.create',
     'departments.update',
+    'departments.delete',
     'attendance.read',
     'attendance.checkin',
     'attendance.checkout',
@@ -44,7 +48,12 @@ export const roleDefaults: Record<Role, string[]> = {
     'analytics.reports',
     'notifications.read',
     'announcements.publish',
+    'announcements.manage',
     'pulse.manage',
+    'gigs.read',
+    'gigs.create',
+    'gigs.manage',
+    'performance.manage',
   ],
   manager: [
     'employees.read',
@@ -66,6 +75,9 @@ export const roleDefaults: Record<Role, string[]> = {
     'performance.review',
     'notifications.read',
     'announcements.read',
+    'gigs.read',
+    'gigs.create',
+    'gigs.manage',
   ],
   recruiter: ['recruitment.read', 'recruitment.manage', 'notifications.read', 'announcements.read'],
   employee: [
@@ -91,6 +103,9 @@ export const generateTemporaryPassword = (): string => {
 };
 
 export const resolveRolePermissions = (role: Role, permissions?: string[]) => (permissions?.length ? permissions : roleDefaults[role]);
+
+const isJwtVerificationError = (error: unknown) =>
+  error instanceof Error && ['JsonWebTokenError', 'TokenExpiredError', 'NotBeforeError'].includes(error.name);
 
 const defaultDesignationByRole: Record<Role, string> = {
   superAdmin: 'Super Admin',
@@ -131,6 +146,8 @@ const ensureEmployeeProfile = async (
     return;
   }
 
+  const department = typeof input?.department === 'string' && input.department.trim() ? input.department : undefined;
+
   await EmployeeModel.create({
     userId,
     employeeId: await generateEmployeeId(),
@@ -138,7 +155,7 @@ const ensureEmployeeProfile = async (
     lastName: user.lastName,
     displayName: `${user.firstName} ${user.lastName}`,
     email: user.email,
-    department: input?.department,
+    department,
     designation: input?.designation ?? defaultDesignationByRole[user.role],
     employmentType: 'full-time',
     joiningDate: new Date(),
@@ -186,6 +203,24 @@ const serializeUser = (user: {
   updatedAt: user.updatedAt,
 });
 
+const serializeSession = (session: {
+  id?: string;
+  _id?: { toString(): string } | string;
+  userAgent?: string | null;
+  ipAddress?: string | null;
+  createdAt?: Date;
+  expiresAt: Date;
+  revokedAt?: Date | null;
+}) => ({
+  id: session.id ?? (typeof session._id === 'string' ? session._id : session._id?.toString() ?? ''),
+  userAgent: session.userAgent ?? null,
+  ipAddress: session.ipAddress ?? null,
+  createdAt: session.createdAt,
+  expiresAt: session.expiresAt,
+  revokedAt: session.revokedAt ?? null,
+  active: !session.revokedAt && session.expiresAt > new Date(),
+});
+
 export class AuthService {
   static async register(input: {
     email: string;
@@ -217,6 +252,13 @@ export class AuthService {
     });
 
     await ensureEmployeeProfile(user, { department: input.department, designation: input.designation });
+    await createAuditLog({
+      actorId: user.id,
+      module: 'auth',
+      action: 'register',
+      entityType: 'User',
+      entityId: user.id,
+    });
 
     return {
       user: serializeUser(user),
@@ -278,6 +320,17 @@ export class AuthService {
 
     user.lastLogin = new Date();
     await user.save();
+    await createAuditLog({
+      actorId: user.id,
+      module: 'auth',
+      action: 'login',
+      entityType: 'User',
+      entityId: user.id,
+      metadata: {
+        ipAddress: input.ipAddress,
+        userAgent: input.userAgent,
+      },
+    });
 
     return {
       accessToken: signAccessToken({
@@ -292,7 +345,16 @@ export class AuthService {
   }
 
   static async refresh(token: string) {
-    const payload = verifyRefreshToken(token);
+    let payload;
+    try {
+      payload = verifyRefreshToken(token);
+    } catch (error) {
+      if (isJwtVerificationError(error)) {
+        throw new AppError('Refresh token is invalid or expired', 401);
+      }
+      throw error;
+    }
+
     const session = await AuthSessionModel.findOne({ jti: payload.jti, revokedAt: { $exists: false } });
     if (!session || session.tokenHash !== hashToken(token)) {
       throw new AppError('Refresh session is invalid', 401);
@@ -335,7 +397,16 @@ export class AuthService {
   }
 
   static async logout(token: string): Promise<void> {
-    const payload = verifyRefreshToken(token);
+    let payload;
+    try {
+      payload = verifyRefreshToken(token);
+    } catch (error) {
+      if (isJwtVerificationError(error)) {
+        return;
+      }
+      throw error;
+    }
+
     await AuthSessionModel.updateOne({ jti: payload.jti }, { revokedAt: new Date() });
   }
 
@@ -398,6 +469,13 @@ export class AuthService {
     user.mustChangePassword = false;
     user.tempPasswordIssuedAt = undefined;
     await user.save();
+    await createAuditLog({
+      actorId: userId,
+      module: 'auth',
+      action: 'password.change',
+      entityType: 'User',
+      entityId: user.id,
+    });
 
     return { updated: true };
   }
@@ -421,12 +499,50 @@ export class AuthService {
     user.mustChangePassword = true;
     user.tempPasswordIssuedAt = new Date();
     await user.save();
+    await createAuditLog({
+      actorId: userId,
+      module: 'auth',
+      action: 'password.reset',
+      entityType: 'User',
+      entityId: user.id,
+    });
 
     return {
       userId: user.id,
       email: user.email,
       generatedPassword,
     };
+  }
+
+  static async updateUserAccess(
+    userId: string,
+    input: {
+      permissions?: string[];
+      isActive?: boolean;
+    },
+  ) {
+    const user = await UserModel.findById(userId);
+    if (!user) {
+      throw new AppError('User not found', 404);
+    }
+
+    if (typeof input.isActive === 'boolean') {
+      user.isActive = input.isActive;
+      await EmployeeModel.updateOne(
+        { userId: user._id },
+        {
+          status: input.isActive ? 'active' : 'inactive',
+        },
+      );
+    }
+
+    if (input.permissions) {
+      user.permissions = Array.from(new Set(input.permissions));
+    }
+
+    await user.save();
+
+    return serializeUser(user);
   }
 
   static async transferSuperAdmin(currentUserId: string, currentPassword: string, targetUserId: string) {
@@ -454,6 +570,17 @@ export class AuthService {
     targetUser.tempPasswordIssuedAt = new Date();
 
     await Promise.all([currentUser.save(), targetUser.save()]);
+    await createAuditLog({
+      actorId: currentUserId,
+      module: 'auth',
+      action: 'super-admin.transfer',
+      entityType: 'User',
+      entityId: targetUser.id,
+      metadata: {
+        previousSuperAdmin: currentUser.email,
+        newSuperAdmin: targetUser.email,
+      },
+    });
 
     return {
       previousSuperAdmin: {
@@ -465,5 +592,30 @@ export class AuthService {
         email: targetUser.email,
       },
     };
+  }
+
+  static async listMySessions(userId: string) {
+    const sessions = await AuthSessionModel.find({ userId }).sort({ createdAt: -1 }).limit(12).lean();
+    return sessions.map((session) => serializeSession(session));
+  }
+
+  static async logoutAll(userId: string) {
+    await AuthSessionModel.updateMany({ userId, revokedAt: { $exists: false } }, { revokedAt: new Date() });
+    await createAuditLog({
+      actorId: userId,
+      module: 'auth',
+      action: 'logout-all',
+      entityType: 'User',
+      entityId: userId,
+    });
+
+    return { loggedOut: true };
+  }
+
+  static async listMyActivity(userId: string) {
+    return AuditLogModel.find({ actorId: userId })
+      .sort({ createdAt: -1 })
+      .limit(20)
+      .lean();
   }
 }

@@ -1,11 +1,32 @@
 import { z } from 'zod';
 
-export const reviewCycleSchema = z.object({
+const reviewCycleBaseSchema = z.object({
   name: z.string().min(2),
   startDate: z.string().datetime(),
   endDate: z.string().datetime(),
   ratingScale: z.array(z.number().min(1).max(5)).default([1, 2, 3, 4, 5]),
   status: z.enum(['draft', 'active', 'completed']).default('draft'),
+});
+
+export const reviewCycleSchema = reviewCycleBaseSchema
+  .superRefine((value, ctx) => {
+    if (new Date(value.endDate) < new Date(value.startDate)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'End date must be after the start date',
+        path: ['endDate'],
+      });
+    }
+  });
+
+export const reviewCycleUpdateSchema = reviewCycleBaseSchema.partial().superRefine((value, ctx) => {
+  if (value.startDate && value.endDate && new Date(value.endDate) < new Date(value.startDate)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'End date must be after the start date',
+      path: ['endDate'],
+    });
+  }
 });
 
 export const objectiveSchema = z.object({

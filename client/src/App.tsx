@@ -24,6 +24,7 @@ import { PulsePage } from './features/pulse/PulsePage';
 import { GigPage } from './features/gig/GigPage';
 import { AnnouncementPage } from './features/announcement/AnnouncementPage';
 import { ProjectPage } from './features/project/ProjectPage';
+import { SettingsPage } from './features/settings/SettingsPage';
 import { canAccessPortalSlug, getPortalConfig, getRoleHomePath, type PortalConfig } from './lib/constants';
 
 const PageTransition = () => {
@@ -45,13 +46,17 @@ const PageTransition = () => {
 };
 
 const PortalLayout = ({ portal }: { portal: PortalConfig }) => {
-  const { accessToken, user } = useAuth();
+  const { accessToken, user, hydrated } = useAuth();
   const hydrateUI = useUIStore((state) => state.hydrate);
   useSocket();
 
   useEffect(() => {
     hydrateUI();
   }, [hydrateUI]);
+
+  if (!hydrated) {
+    return <div className="min-h-screen" />;
+  }
 
   if (!accessToken) {
     return <Navigate to="/login" replace />;
@@ -79,16 +84,28 @@ const PortalLayout = ({ portal }: { portal: PortalConfig }) => {
   );
 };
 
-const PublicLayout = () => (
-  <div className="min-h-screen px-4 py-10 md:px-8 xl:px-12">
-    <ErrorBoundary>
-      <PageTransition />
-    </ErrorBoundary>
-  </div>
-);
+const PublicLayout = () => {
+  const hydrateUI = useUIStore((state) => state.hydrate);
+
+  useEffect(() => {
+    hydrateUI();
+  }, [hydrateUI]);
+
+  return (
+    <div className="min-h-screen px-4 py-10 md:px-8 xl:px-12">
+      <ErrorBoundary>
+        <PageTransition />
+      </ErrorBoundary>
+    </div>
+  );
+};
 
 const RoleHomeRedirect = () => {
-  const { accessToken, user } = useAuth();
+  const { accessToken, user, hydrated } = useAuth();
+
+  if (!hydrated) {
+    return <div className="min-h-screen" />;
+  }
 
   if (!accessToken) {
     return <Navigate to="/login" replace />;
@@ -98,7 +115,12 @@ const RoleHomeRedirect = () => {
 };
 
 const RoleAwareFallback = () => {
-  const { accessToken, user } = useAuth();
+  const { accessToken, user, hydrated } = useAuth();
+
+  if (!hydrated) {
+    return <div className="min-h-screen" />;
+  }
+
   return <Navigate to={accessToken ? getRoleHomePath(user?.role) : '/login'} replace />;
 };
 
@@ -145,6 +167,7 @@ export default function App() {
           <Route path="pulse" element={<GuardedPortalPage slug="pulse" element={<PulsePage />} />} />
           <Route path="gigs" element={<GuardedPortalPage slug="gigs" element={<GigPage />} />} />
           <Route path="announcements" element={<GuardedPortalPage slug="announcements" element={<AnnouncementPage />} />} />
+          <Route path="settings" element={<GuardedPortalPage slug="settings" element={<SettingsPage />} />} />
         </Route>
       ))}
       <Route path="*" element={<RoleAwareFallback />} />

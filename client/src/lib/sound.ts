@@ -1,6 +1,6 @@
 import { useUIStore } from '../store/uiStore';
 
-type SoundKind = 'click' | 'success' | 'soft';
+export type SoundKind = 'click' | 'success' | 'soft';
 
 let audioContext: AudioContext | null = null;
 
@@ -26,9 +26,9 @@ const getAudioContext = () => {
 };
 
 const soundProfiles: Record<SoundKind, { frequency: number; duration: number; type: OscillatorType; gain: number }> = {
-  click: { frequency: 420, duration: 0.06, type: 'triangle', gain: 0.03 },
-  success: { frequency: 620, duration: 0.12, type: 'sine', gain: 0.035 },
-  soft: { frequency: 260, duration: 0.08, type: 'sine', gain: 0.02 },
+  click: { frequency: 420, duration: 0.075, type: 'triangle', gain: 0.05 },
+  success: { frequency: 620, duration: 0.14, type: 'sine', gain: 0.06 },
+  soft: { frequency: 260, duration: 0.1, type: 'sine', gain: 0.04 },
 };
 
 export const playUiTone = (kind: SoundKind = 'click', force = false) => {

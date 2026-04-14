@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 export const leaveApplySchema = z.object({
+  employeeId: z.string().optional(),
   leaveType: z.enum(['casual', 'sick', 'annual', 'unpaid', 'maternity', 'paternity']),
   startDate: z.string().datetime(),
   endDate: z.string().datetime(),

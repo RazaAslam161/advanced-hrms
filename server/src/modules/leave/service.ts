@@ -74,8 +74,9 @@ export class LeaveService {
   }
 
   static async apply(
-    userId: string,
+    requester: JwtUserPayload,
     payload: {
+      employeeId?: string;
       leaveType: 'casual' | 'sick' | 'annual' | 'unpaid' | 'maternity' | 'paternity';
       startDate: string;
       endDate: string;
@@ -83,7 +84,18 @@ export class LeaveService {
       reason: string;
     },
   ) {
-    const employee = await EmployeeModel.findOne({ userId, isDeleted: false });
+    let employee;
+    if (requester.role === 'superAdmin') {
+      if (!payload.employeeId) {
+        throw new AppError('Super Admin can only create leave requests on behalf of an employee', 400);
+      }
+      employee = await EmployeeModel.findOne({ _id: payload.employeeId, isDeleted: false });
+    } else if (requester.role === 'admin' && payload.employeeId) {
+      employee = await EmployeeModel.findOne({ _id: payload.employeeId, isDeleted: false });
+    } else {
+      employee = await EmployeeModel.findOne({ userId: requester.userId, isDeleted: false });
+    }
+
     if (!employee) {
       throw new AppError('Employee profile not found', 404);
     }

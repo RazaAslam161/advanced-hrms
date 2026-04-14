@@ -24,6 +24,14 @@ export class GigService {
     return gig;
   }
 
+  static async remove(id: string) {
+    const gig = await GigModel.findByIdAndDelete(id);
+    if (!gig) {
+      throw new AppError('Gig not found', 404);
+    }
+    return gig;
+  }
+
   static async apply(gigId: string, userId: string) {
     const employee = await EmployeeModel.findOne({ userId, isDeleted: false });
     if (!employee) {

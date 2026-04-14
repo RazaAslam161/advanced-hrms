@@ -19,6 +19,11 @@ export const updateProject = asyncHandler(async (req: AuthenticatedRequest, res:
   res.json(sendSuccess('Project updated successfully', project));
 });
 
+export const deleteProject = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const project = await ProjectService.remove(String(req.params.id));
+  res.json(sendSuccess('Project deleted successfully', project));
+});
+
 export const addProjectUpdate = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const project = await ProjectService.addUpdate(String(req.params.id), req.user!, req.body);
   res.json(sendSuccess('Project status updated successfully', project));

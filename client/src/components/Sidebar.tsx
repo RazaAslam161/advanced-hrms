@@ -7,6 +7,7 @@ import { cn } from '../lib/utils';
 import { useAuthStore } from '../store/authStore';
 import { useUIStore } from '../store/uiStore';
 import { BrandLogo } from './BrandLogo';
+import { DeveloperSignature } from './DeveloperSignature';
 import { Button } from './ui/button';
 
 export const Sidebar = ({ portal }: { portal: PortalConfig }) => {
@@ -25,12 +26,7 @@ export const Sidebar = ({ portal }: { portal: PortalConfig }) => {
         <div className="mb-8 flex items-start justify-between gap-3">
           <div className="min-w-0">
             <BrandLogo collapsed={!sidebarOpen} />
-            {sidebarOpen ? (
-              <div className="mt-4 rounded-[1.4rem] border border-white/10 bg-white/5 p-4">
-                <p className="text-[11px] uppercase tracking-[0.34em] text-secondary">{portal.label}</p>
-                <p className="mt-2 text-sm text-white/75">{portal.description}</p>
-              </div>
-            ) : null}
+            {sidebarOpen ? <p className="mt-4 text-xs uppercase tracking-[0.26em] text-white/45">{portal.label}</p> : null}
           </div>
           <Button variant="ghost" className="text-white hover:bg-white/10 hover:text-white" onClick={toggleSidebar}>
             {sidebarOpen ? <PanelLeftClose className="h-5 w-5" /> : <PanelLeftOpen className="h-5 w-5" />}
@@ -55,12 +51,15 @@ export const Sidebar = ({ portal }: { portal: PortalConfig }) => {
             ))}
           </nav>
           {sidebarOpen ? (
-            <div className="mt-8 rounded-[1.4rem] border border-white/10 bg-white/5 p-4">
-              <p className="text-[11px] uppercase tracking-[0.34em] text-white/45">Official Site</p>
-              <a href={companyProfile.website} target="_blank" rel="noreferrer" className="mt-2 block text-sm font-medium text-white/85 hover:text-white">
-                {companyProfile.website}
-              </a>
-              <p className="mt-3 text-sm text-white/65">{companyProfile.offices[0].city} and {companyProfile.offices[1].city}</p>
+            <div className="mt-8 space-y-4">
+              <div className="rounded-[1.2rem] border border-white/10 bg-white/5 p-4">
+                <p className="text-[11px] uppercase tracking-[0.34em] text-white/45">Official Site</p>
+                <a href={companyProfile.website} target="_blank" rel="noreferrer" className="mt-2 block text-sm font-medium text-white/85 hover:text-white">
+                  {companyProfile.website}
+                </a>
+                <p className="mt-3 text-sm text-white/65">{companyProfile.offices[0].city} and {companyProfile.offices[1].city}</p>
+              </div>
+              <DeveloperSignature compact />
             </div>
           ) : null}
         </div>

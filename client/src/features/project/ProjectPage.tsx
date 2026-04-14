@@ -10,6 +10,7 @@ import { Input } from '../../components/ui/input';
 import { Button } from '../../components/ui/button';
 import { Textarea } from '../../components/ui/textarea';
 import { Badge } from '../../components/ui/badge';
+import { hasAnyPermission } from '../../lib/permissions';
 import { useAuthStore } from '../../store/authStore';
 import { formatDate, getApiErrorMessage, toIsoDateTime, toLocalDateTimeInputValue } from '../../lib/utils';
 import type { Department, Project } from '../../types';
@@ -50,6 +51,21 @@ const projectUpdateSchema = z.object({
 type ProjectFormValues = z.infer<typeof projectSchema>;
 type ProjectUpdateFormValues = z.infer<typeof projectUpdateSchema>;
 
+const projectDefaults = (): ProjectFormValues => ({
+  name: '',
+  code: '',
+  clientName: 'Meta Labs Tech Internal',
+  department: '',
+  managerId: '',
+  memberIds: [],
+  description: '',
+  status: 'planning',
+  health: 'green',
+  progress: 0,
+  startDate: toLocalDateTimeInputValue(new Date()),
+  endDate: '',
+});
+
 const healthTone = {
   green: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/25',
   amber: 'bg-amber-500/15 text-amber-200 border-amber-500/25',
@@ -60,24 +76,12 @@ export const ProjectPage = () => {
   const queryClient = useQueryClient();
   const user = useAuthStore((state) => state.user);
   const [activeDepartment, setActiveDepartment] = useState<string>('all');
-  const canManageProjects = ['superAdmin', 'admin', 'manager'].includes(user?.role ?? '');
+  const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
+  const canManageProjects = hasAnyPermission(user?.permissions, ['projects.create', 'projects.update', 'projects.assign']);
 
   const projectForm = useForm<ProjectFormValues>({
     resolver: zodResolver(projectSchema),
-    defaultValues: {
-      name: '',
-      code: '',
-      clientName: 'Meta Labs Tech Internal',
-      department: '',
-      managerId: '',
-      memberIds: [],
-      description: '',
-      status: 'planning',
-      health: 'green',
-      progress: 0,
-      startDate: toLocalDateTimeInputValue(new Date()),
-      endDate: '',
-    },
+    defaultValues: projectDefaults(),
   });
 
   const updateForm = useForm<ProjectUpdateFormValues>({
@@ -115,31 +119,39 @@ export const ProjectPage = () => {
     },
   });
 
-  const createProjectMutation = useMutation({
+  const saveProjectMutation = useMutation({
     mutationFn: async (values: ProjectFormValues) => {
-      await api.post('/projects', {
+      const payload = {
         ...values,
         code: values.code.toUpperCase(),
         startDate: toIsoDateTime(values.startDate),
         endDate: values.endDate ? toIsoDateTime(values.endDate) : undefined,
-      });
+      };
+
+      if (editingProjectId) {
+        await api.patch(`/projects/${editingProjectId}`, payload);
+        return;
+      }
+
+      await api.post('/projects', payload);
     },
     onSuccess: () => {
-      projectForm.reset({
-        name: '',
-        code: '',
-        clientName: 'Meta Labs Tech Internal',
-        department: '',
-        managerId: '',
-        memberIds: [],
-        description: '',
-        status: 'planning',
-        health: 'green',
-        progress: 0,
-        startDate: toLocalDateTimeInputValue(new Date()),
-        endDate: '',
-      });
+      projectForm.reset(projectDefaults());
+      setEditingProjectId(null);
       queryClient.invalidateQueries({ queryKey: ['projects'] });
+    },
+  });
+
+  const deleteProjectMutation = useMutation({
+    mutationFn: async (projectId: string) => {
+      await api.delete(`/projects/${projectId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      if (editingProjectId) {
+        setEditingProjectId(null);
+        projectForm.reset(projectDefaults());
+      }
     },
   });
 
@@ -196,8 +208,30 @@ export const ProjectPage = () => {
   }
 
   const selectedMembers = new Set(projectForm.watch('memberIds'));
-  const projectError = createProjectMutation.isError ? getApiErrorMessage(createProjectMutation.error, 'Project could not be created.') : null;
+  const projectError =
+    saveProjectMutation.isError || deleteProjectMutation.isError
+      ? getApiErrorMessage(saveProjectMutation.error ?? deleteProjectMutation.error, 'Project workspace could not be saved.')
+      : null;
   const updateError = addUpdateMutation.isError ? getApiErrorMessage(addUpdateMutation.error, 'Project update could not be submitted.') : null;
+
+  const startEditingProject = (project: Project) => {
+    setEditingProjectId(project._id);
+    projectForm.reset({
+      name: project.name,
+      code: project.code,
+      clientName: project.clientName,
+      department: project.department?._id ?? '',
+      managerId: project.managerId?._id ?? '',
+      memberIds: (project.memberIds ?? []).map((member) => member._id),
+      description: project.description,
+      status: project.status,
+      health: project.health,
+      progress: project.progress,
+      startDate: toLocalDateTimeInputValue(project.startDate),
+      endDate: project.endDate ? toLocalDateTimeInputValue(project.endDate) : '',
+    });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   return (
     <div className="space-y-6">
@@ -226,7 +260,7 @@ export const ProjectPage = () => {
               >
                 <p className="text-xs uppercase tracking-[0.25em] text-secondary">{department.code}</p>
                 <p className="mt-2 text-lg font-semibold text-white">{department.name}</p>
-                <p className="mt-2 text-sm text-white/55">{department.activeProjects} active projects • {department.memberCount} assigned members</p>
+                <p className="mt-2 text-sm text-white/55">{department.activeProjects} active projects | {department.memberCount} assigned members</p>
               </button>
             ))}
           </div>
@@ -237,27 +271,38 @@ export const ProjectPage = () => {
             <p className="text-sm text-white/55">Employees and managers can push project progress directly from their portal.</p>
           </div>
           <form className="grid gap-3 md:grid-cols-2" onSubmit={updateForm.handleSubmit((values) => addUpdateMutation.mutate(values))}>
-            <select className="w-full rounded-2xl border border-white/10 bg-white/6 px-4 py-3 text-sm text-white" {...updateForm.register('projectId')}>
-              <option value="">Select project</option>
-              {(projectsQuery.data ?? []).map((project) => (
-                <option key={project._id} value={project._id}>
-                  {project.name}
-                </option>
-              ))}
-            </select>
-            <select className="w-full rounded-2xl border border-white/10 bg-white/6 px-4 py-3 text-sm text-white" {...updateForm.register('projectStatus')}>
-              <option value="planning">Planning</option>
-              <option value="active">Active</option>
-              <option value="onHold">On Hold</option>
-              <option value="completed">Completed</option>
-            </select>
+            <div>
+              <p className="mb-2 text-xs uppercase tracking-[0.22em] text-secondary">Project</p>
+              <select className="w-full rounded-2xl border border-white/10 bg-white/6 px-4 py-3 text-sm text-white" {...updateForm.register('projectId')}>
+                <option value="">Select project</option>
+                {(projectsQuery.data ?? []).map((project) => (
+                  <option key={project._id} value={project._id}>
+                    {project.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <p className="mb-2 text-xs uppercase tracking-[0.22em] text-secondary">Updated status</p>
+              <select className="w-full rounded-2xl border border-white/10 bg-white/6 px-4 py-3 text-sm text-white" {...updateForm.register('projectStatus')}>
+                <option value="planning">Planning</option>
+                <option value="active">Active</option>
+                <option value="onHold">On Hold</option>
+                <option value="completed">Completed</option>
+              </select>
+            </div>
             <div className="md:col-span-2">
+              <p className="mb-2 text-xs uppercase tracking-[0.22em] text-secondary">Summary</p>
               <Textarea rows={4} placeholder="What moved forward today?" {...updateForm.register('summary')} />
             </div>
             <div className="md:col-span-2">
+              <p className="mb-2 text-xs uppercase tracking-[0.22em] text-secondary">Blockers</p>
               <Textarea rows={3} placeholder="Blockers, dependencies, or escalation items" {...updateForm.register('blockers')} />
             </div>
-            <Input type="number" min={0} max={100} placeholder="Progress %" {...updateForm.register('progress')} />
+            <div>
+              <p className="mb-2 text-xs uppercase tracking-[0.22em] text-secondary">Progress %</p>
+              <Input type="number" min={0} max={100} placeholder="Progress %" {...updateForm.register('progress')} />
+            </div>
             <div className="md:col-span-2">
               <Button type="submit" disabled={addUpdateMutation.isPending}>
                 {addUpdateMutation.isPending ? 'Submitting update...' : 'Submit project update'}
@@ -272,45 +317,78 @@ export const ProjectPage = () => {
       {canManageProjects ? (
         <Card className="space-y-4">
           <div>
-            <h3 className="text-lg font-semibold text-white">Create and assign project workspace</h3>
-            <p className="text-sm text-white/55">Super Admin, HR, and managers can create project workspaces, assign leads, and connect employees to delivery work.</p>
+            <h3 className="text-lg font-semibold text-white">{editingProjectId ? 'Edit project workspace' : 'Create and assign project workspace'}</h3>
+            <p className="text-sm text-white/55">Super Admin, HR, and managers can create project workspaces, assign leads, edit delivery details, and manage project visibility.</p>
           </div>
-          <form className="grid gap-3 md:grid-cols-2 xl:grid-cols-3" onSubmit={projectForm.handleSubmit((values) => createProjectMutation.mutate(values))}>
-            <Input placeholder="Project name" {...projectForm.register('name')} />
-            <Input placeholder="Project code" {...projectForm.register('code')} />
-            <Input placeholder="Client name" {...projectForm.register('clientName')} />
-            <select className="w-full rounded-2xl border border-white/10 bg-white/6 px-4 py-3 text-sm text-white" {...projectForm.register('department')}>
-              <option value="">Select department</option>
-              {(departmentsQuery.data ?? []).map((department) => (
-                <option key={department._id} value={department._id}>
-                  {department.name}
-                </option>
-              ))}
-            </select>
-            <select className="w-full rounded-2xl border border-white/10 bg-white/6 px-4 py-3 text-sm text-white" {...projectForm.register('managerId')}>
-              <option value="">Assign manager</option>
-              {(employeesQuery.data ?? []).filter((employee) => employee.designation.toLowerCase().includes('manager') || employee.designation.toLowerCase().includes('lead')).map((employee) => (
-                <option key={employee._id} value={employee._id}>
-                  {employee.firstName} {employee.lastName} • {employee.designation}
-                </option>
-              ))}
-            </select>
-            <Input type="number" min={0} max={100} placeholder="Initial progress %" {...projectForm.register('progress')} />
-            <select className="w-full rounded-2xl border border-white/10 bg-white/6 px-4 py-3 text-sm text-white" {...projectForm.register('status')}>
-              <option value="planning">Planning</option>
-              <option value="active">Active</option>
-              <option value="onHold">On Hold</option>
-              <option value="completed">Completed</option>
-            </select>
-            <select className="w-full rounded-2xl border border-white/10 bg-white/6 px-4 py-3 text-sm text-white" {...projectForm.register('health')}>
-              <option value="green">Green</option>
-              <option value="amber">Amber</option>
-              <option value="red">Red</option>
-            </select>
-            <Input type="datetime-local" {...projectForm.register('startDate')} />
-            <Input type="datetime-local" {...projectForm.register('endDate')} />
+          <form className="grid gap-3 md:grid-cols-2 xl:grid-cols-3" onSubmit={projectForm.handleSubmit((values) => saveProjectMutation.mutate(values))}>
+            <div>
+              <p className="mb-2 text-xs uppercase tracking-[0.22em] text-secondary">Project name</p>
+              <Input placeholder="Project name" {...projectForm.register('name')} />
+            </div>
+            <div>
+              <p className="mb-2 text-xs uppercase tracking-[0.22em] text-secondary">Project code</p>
+              <Input placeholder="Project code" {...projectForm.register('code')} />
+            </div>
+            <div>
+              <p className="mb-2 text-xs uppercase tracking-[0.22em] text-secondary">Client</p>
+              <Input placeholder="Client name" {...projectForm.register('clientName')} />
+            </div>
+            <div>
+              <p className="mb-2 text-xs uppercase tracking-[0.22em] text-secondary">Department</p>
+              <select className="w-full rounded-2xl border border-white/10 bg-white/6 px-4 py-3 text-sm text-white" {...projectForm.register('department')}>
+                <option value="">Select department</option>
+                {(departmentsQuery.data ?? []).map((department) => (
+                  <option key={department._id} value={department._id}>
+                    {department.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <p className="mb-2 text-xs uppercase tracking-[0.22em] text-secondary">Project manager</p>
+              <select className="w-full rounded-2xl border border-white/10 bg-white/6 px-4 py-3 text-sm text-white" {...projectForm.register('managerId')}>
+                <option value="">Assign manager</option>
+                {(employeesQuery.data ?? [])
+                  .filter((employee) => employee.designation.toLowerCase().includes('manager') || employee.designation.toLowerCase().includes('lead'))
+                  .map((employee) => (
+                    <option key={employee._id} value={employee._id}>
+                      {employee.firstName} {employee.lastName} | {employee.designation}
+                    </option>
+                  ))}
+              </select>
+            </div>
+            <div>
+              <p className="mb-2 text-xs uppercase tracking-[0.22em] text-secondary">Initial progress</p>
+              <Input type="number" min={0} max={100} placeholder="Initial progress %" {...projectForm.register('progress')} />
+            </div>
+            <div>
+              <p className="mb-2 text-xs uppercase tracking-[0.22em] text-secondary">Status</p>
+              <select className="w-full rounded-2xl border border-white/10 bg-white/6 px-4 py-3 text-sm text-white" {...projectForm.register('status')}>
+                <option value="planning">Planning</option>
+                <option value="active">Active</option>
+                <option value="onHold">On Hold</option>
+                <option value="completed">Completed</option>
+              </select>
+            </div>
+            <div>
+              <p className="mb-2 text-xs uppercase tracking-[0.22em] text-secondary">Health</p>
+              <select className="w-full rounded-2xl border border-white/10 bg-white/6 px-4 py-3 text-sm text-white" {...projectForm.register('health')}>
+                <option value="green">Green</option>
+                <option value="amber">Amber</option>
+                <option value="red">Red</option>
+              </select>
+            </div>
+            <div>
+              <p className="mb-2 text-xs uppercase tracking-[0.22em] text-secondary">Start date</p>
+              <Input type="datetime-local" {...projectForm.register('startDate')} />
+            </div>
+            <div>
+              <p className="mb-2 text-xs uppercase tracking-[0.22em] text-secondary">End date</p>
+              <Input type="datetime-local" {...projectForm.register('endDate')} />
+            </div>
             <div className="xl:col-span-3">
-              <Textarea rows={4} placeholder="Scope, delivery goals, and ownership details" {...projectForm.register('description')} />
+              <p className="mb-2 text-xs uppercase tracking-[0.22em] text-secondary">Project scope</p>
+              <Textarea rows={4} placeholder="Scope, delivery goals, ownership details, and important notes" {...projectForm.register('description')} />
             </div>
             <div className="xl:col-span-3 space-y-3">
               <p className="text-sm font-medium text-white">Assign team members</p>
@@ -339,13 +417,32 @@ export const ProjectPage = () => {
                 })}
               </div>
             </div>
-            <div className="xl:col-span-3">
-              <Button type="submit" disabled={createProjectMutation.isPending}>
-                {createProjectMutation.isPending ? 'Creating workspace...' : 'Create project workspace'}
+            <div className="xl:col-span-3 flex flex-wrap gap-3">
+              <Button type="submit" disabled={saveProjectMutation.isPending}>
+                {saveProjectMutation.isPending
+                  ? editingProjectId
+                    ? 'Saving workspace...'
+                    : 'Creating workspace...'
+                  : editingProjectId
+                    ? 'Save project workspace'
+                    : 'Create project workspace'}
               </Button>
+              {editingProjectId ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  soundTone="none"
+                  onClick={() => {
+                    setEditingProjectId(null);
+                    projectForm.reset(projectDefaults());
+                  }}
+                >
+                  Cancel edit
+                </Button>
+              ) : null}
             </div>
           </form>
-          {createProjectMutation.isSuccess ? <p className="text-sm text-emerald-300">Project workspace created and assigned successfully.</p> : null}
+          {saveProjectMutation.isSuccess ? <p className="text-sm text-emerald-300">{editingProjectId ? 'Project workspace updated successfully.' : 'Project workspace created and assigned successfully.'}</p> : null}
           {projectError ? <p className="text-sm text-rose-300">{projectError}</p> : null}
         </Card>
       ) : null}
@@ -362,9 +459,21 @@ export const ProjectPage = () => {
                 <div>
                   <p className="text-xs uppercase tracking-[0.24em] text-secondary">{project.code}</p>
                   <h4 className="mt-2 text-xl font-semibold text-white">{project.name}</h4>
-                  <p className="mt-2 text-sm text-white/55">{project.clientName} • {project.department?.name ?? 'Department not linked'}</p>
+                  <p className="mt-2 text-sm text-white/55">{project.clientName} | {project.department?.name ?? 'Department not linked'}</p>
                 </div>
-                <Badge className={healthTone[project.health]}>{project.health}</Badge>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge className={healthTone[project.health]}>{project.health}</Badge>
+                  {canManageProjects ? (
+                    <>
+                      <Button type="button" variant="outline" soundTone="none" onClick={() => startEditingProject(project)}>
+                        Edit
+                      </Button>
+                      <Button type="button" variant="outline" disabled={deleteProjectMutation.isPending} onClick={() => deleteProjectMutation.mutate(project._id)}>
+                        Delete
+                      </Button>
+                    </>
+                  ) : null}
+                </div>
               </div>
               <p className="text-sm text-white/68">{project.description}</p>
               <div className="grid gap-3 md:grid-cols-2">
@@ -384,7 +493,7 @@ export const ProjectPage = () => {
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm text-white/55">
                   <span>Status</span>
-                  <span>{project.status} • {project.progress}%</span>
+                  <span>{project.status} | {project.progress}%</span>
                 </div>
                 <div className="h-2 rounded-full bg-white/10">
                   <div className="h-2 rounded-full bg-gradient-to-r from-primary to-secondary" style={{ width: `${project.progress}%` }} />

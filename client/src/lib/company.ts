@@ -4,9 +4,9 @@ export const companyProfile = {
   website: 'https://metalabstech.com',
   email: 'info@metalabstech.com',
   phone: '+92 337 9649228',
-  tagline: 'Build bold digital products with disciplined execution.',
+  tagline: 'A practical HR and operations workspace for a growing software company.',
   description:
-    'Meta Labs Tech is a custom software development company delivering web, mobile, GIS, cloud, UI/UX, and growth solutions for startups and enterprises worldwide.',
+    'NEXUS HRMS brings employee records, leave, attendance, payroll, hiring, and internal communication into one clean workspace for Meta Labs Tech.',
   brand: {
     base: '#16101F',
     surface: '#1B1337',

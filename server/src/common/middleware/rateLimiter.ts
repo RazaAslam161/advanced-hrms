@@ -9,7 +9,12 @@ export const generalRateLimiter = rateLimit({
 
 export const authRateLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 5,
+  max: process.env.NODE_ENV === 'production' ? 10 : 20,
   standardHeaders: true,
   legacyHeaders: false,
+  skipSuccessfulRequests: true,
+  message: {
+    success: false,
+    message: 'Too many sign-in attempts. Please wait a minute and try again.',
+  },
 });

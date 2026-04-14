@@ -15,7 +15,7 @@ const router = Router();
 router.use(authenticate);
 router.get('/', authorize(['superAdmin', 'admin', 'manager', 'employee', 'recruiter'], ['notifications.read']), listNotifications);
 router.get('/preferences/me', authorize(['superAdmin', 'admin', 'manager', 'employee', 'recruiter'], ['notifications.read']), getNotificationPreferences);
-router.put('/preferences/me', authorize(['superAdmin', 'admin', 'manager', 'employee', 'recruiter'], ['notifications.manage']), validate({ body: notificationPreferenceSchema }), updateNotificationPreferences);
+router.put('/preferences/me', authorize(['superAdmin', 'admin', 'manager', 'employee', 'recruiter'], ['notifications.read']), validate({ body: notificationPreferenceSchema }), updateNotificationPreferences);
 router.patch('/:id', authorize(['superAdmin', 'admin', 'manager', 'employee', 'recruiter'], ['notifications.read']), validate({ body: notificationReadSchema }), markNotification);
 
 export { router as notificationRouter };

@@ -14,6 +14,16 @@ export const getMyEmployeeProfile = asyncHandler(async (req: AuthenticatedReques
   res.json(sendSuccess('Employee profile fetched successfully', employee));
 });
 
+export const updateMyEmployeeProfile = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const employee = await EmployeeService.updateSelf(req.user!.userId, req.body);
+  res.json(sendSuccess('Employee profile updated successfully', employee));
+});
+
+export const getMyEmployeeActivity = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const timeline = await EmployeeService.myTimeline(req.user!.userId);
+  res.json(sendSuccess('Employee activity fetched successfully', timeline));
+});
+
 export const listEmployees = asyncHandler(async (req: Request, res: Response) => {
   const result = await EmployeeService.list(req.query as Record<string, string>);
   res.json(sendSuccess('Employees fetched successfully', result.items, result.pagination));
@@ -42,6 +52,16 @@ export const deleteEmployee = asyncHandler(async (req: AuthenticatedRequest, res
 export const uploadEmployeeAvatar = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const employee = await EmployeeService.uploadAvatar(String(req.params.id), req.file!, req.user?.userId);
   res.json(sendSuccess('Employee avatar uploaded successfully', employee));
+});
+
+export const uploadMyEmployeeAvatar = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const employee = await EmployeeService.uploadMyAvatar(req.user!.userId, req.file!);
+  res.json(sendSuccess('Profile photo updated successfully', employee));
+});
+
+export const removeMyEmployeeAvatar = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const employee = await EmployeeService.removeMyAvatar(req.user!.userId);
+  res.json(sendSuccess('Profile photo removed successfully', employee));
 });
 
 export const uploadEmployeeDocument = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {

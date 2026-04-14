@@ -1,6 +1,16 @@
 import { z } from 'zod';
 import { roles } from '../../common/constants/roles';
 
+const optionalObjectIdField = z.preprocess(
+  (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+  z.string().optional(),
+);
+
+const optionalTrimmedString = z.preprocess(
+  (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+  z.string().optional(),
+);
+
 const skillSchema = z.object({
   skill: z.string().min(1),
   level: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5)]),
@@ -15,14 +25,15 @@ const documentSchema = z.object({
 export const employeeBodySchema = z.object({
   firstName: z.string().min(2),
   lastName: z.string().min(2),
-  displayName: z.string().optional(),
+  displayName: optionalTrimmedString,
   email: z.string().email(),
   password: z.string().min(10).optional(),
   role: z.enum(roles).default('employee'),
   permissions: z.array(z.string()).optional(),
-  department: z.string().optional(),
+  department: optionalObjectIdField,
   designation: z.string().min(2),
-  reportingTo: z.string().optional(),
+  phone: optionalTrimmedString,
+  reportingTo: optionalObjectIdField,
   employmentType: z.enum(['full-time', 'part-time', 'contract', 'intern']),
   joiningDate: z.string().datetime(),
   probationEndDate: z.string().datetime().optional(),
@@ -61,9 +72,29 @@ export const employeeQuerySchema = z.object({
   page: z.string().optional(),
   limit: z.string().optional(),
   search: z.string().optional(),
-  department: z.string().optional(),
+  department: optionalObjectIdField,
   status: z.string().optional(),
   type: z.string().optional(),
+});
+
+export const employeeSelfProfileSchema = z.object({
+  firstName: z.string().min(2),
+  lastName: z.string().min(2),
+  displayName: optionalTrimmedString,
+  email: z.string().email(),
+  phone: optionalTrimmedString,
+  timezone: z.string().min(2),
+  workLocation: z.enum(['onsite', 'remote', 'hybrid']),
+  country: z.string().min(2),
+  emergencyContacts: z
+    .array(
+      z.object({
+        name: z.string().min(2),
+        relation: z.string().min(2),
+        phone: z.string().min(5),
+      }),
+    )
+    .default([]),
 });
 
 export const employeeDocumentSchema = documentSchema;

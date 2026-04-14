@@ -51,6 +51,14 @@ export class AnnouncementService {
     return announcement;
   }
 
+  static async remove(id: string) {
+    const announcement = await AnnouncementModel.findByIdAndDelete(id);
+    if (!announcement) {
+      throw new AppError('Announcement not found', 404);
+    }
+    return announcement;
+  }
+
   static async markRead(id: string, userId: string) {
     const announcement = await AnnouncementModel.findById(id);
     if (!announcement) {

@@ -8,7 +8,7 @@ const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().default(4001),
   CLIENT_URL: z.string().default('http://localhost:5173'),
-  MONGODB_URI: z.string().default('mongodb://127.0.0.1:27017/nexus-hrms'),
+  MONGODB_URI: z.string().default('mongodb://127.0.0.1:27017/nexus-hrms-metalabs'),
   REDIS_URL: z.string().default('redis://127.0.0.1:6379'),
   QUEUE_DRIVER: z.enum(['inline', 'bullmq']).default('inline'),
   FILE_STORAGE_DRIVER: z.enum(['local', 's3']).default('local'),

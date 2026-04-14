@@ -18,6 +18,7 @@ export class ProjectService {
         .populate('department', 'name code')
         .populate('managerId', 'employeeId firstName lastName designation')
         .populate('memberIds', 'employeeId firstName lastName designation')
+        .populate('updates.employeeId', 'employeeId firstName lastName designation')
         .sort({ updatedAt: -1 })
         .lean();
     }
@@ -32,6 +33,7 @@ export class ProjectService {
         .populate('department', 'name code')
         .populate('managerId', 'employeeId firstName lastName designation')
         .populate('memberIds', 'employeeId firstName lastName designation')
+        .populate('updates.employeeId', 'employeeId firstName lastName designation')
         .sort({ updatedAt: -1 })
         .lean();
     }
@@ -43,6 +45,7 @@ export class ProjectService {
       .populate('department', 'name code')
       .populate('managerId', 'employeeId firstName lastName designation')
       .populate('memberIds', 'employeeId firstName lastName designation')
+      .populate('updates.employeeId', 'employeeId firstName lastName designation')
       .sort({ updatedAt: -1 })
       .lean();
   }
@@ -64,12 +67,14 @@ export class ProjectService {
   static async update(id: string, payload: Record<string, unknown>) {
     const project = await ProjectModel.findOneAndUpdate(
       { _id: id, isDeleted: false },
-      {
-        ...payload,
-        code: payload.code ? String(payload.code).toUpperCase() : undefined,
-        startDate: payload.startDate ? new Date(String(payload.startDate)) : undefined,
-        endDate: payload.endDate ? new Date(String(payload.endDate)) : undefined,
-      },
+      Object.fromEntries(
+        Object.entries({
+          ...payload,
+          code: payload.code ? String(payload.code).toUpperCase() : undefined,
+          startDate: payload.startDate ? new Date(String(payload.startDate)) : undefined,
+          endDate: payload.endDate ? new Date(String(payload.endDate)) : undefined,
+        }).filter(([, value]) => value !== undefined),
+      ),
       { new: true },
     );
 
@@ -77,6 +82,19 @@ export class ProjectService {
       throw new AppError('Project not found', 404);
     }
 
+    return ProjectModel.findById(project._id)
+      .populate('department', 'name code')
+      .populate('managerId', 'employeeId firstName lastName designation')
+      .populate('memberIds', 'employeeId firstName lastName designation')
+      .populate('updates.employeeId', 'employeeId firstName lastName designation')
+      .lean();
+  }
+
+  static async remove(id: string) {
+    const project = await ProjectModel.findOneAndUpdate({ _id: id, isDeleted: false }, { isDeleted: true }, { new: true });
+    if (!project) {
+      throw new AppError('Project not found', 404);
+    }
     return project;
   }
 

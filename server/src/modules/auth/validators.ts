@@ -1,6 +1,11 @@
 import { z } from 'zod';
 import { roles } from '../../common/constants/roles';
 
+const optionalObjectIdField = z.preprocess(
+  (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+  z.string().optional(),
+);
+
 export const registerSchema = z.object({
   email: z.string().email(),
   password: z
@@ -14,7 +19,7 @@ export const registerSchema = z.object({
   permissions: z.array(z.string()).optional(),
   firstName: z.string().min(2),
   lastName: z.string().min(2),
-  department: z.string().optional(),
+  department: optionalObjectIdField,
   designation: z.string().min(2).optional(),
 });
 
@@ -41,4 +46,9 @@ export const changePasswordSchema = z.object({
 export const transferSuperAdminSchema = z.object({
   currentPassword: z.string().min(1),
   targetUserId: z.string().min(1),
+});
+
+export const userAccessSchema = z.object({
+  permissions: z.array(z.string()).optional(),
+  isActive: z.boolean().optional(),
 });

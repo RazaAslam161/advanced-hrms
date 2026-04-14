@@ -11,10 +11,11 @@ import { StatCard } from '../../components/StatCard';
 import { ErrorState, LoadingState } from '../../components/AsyncState';
 import { ClipboardList, Goal, Star, TrendingUp } from 'lucide-react';
 import { getApiErrorMessage, toIsoDateTime, toLocalDateTimeInputValue } from '../../lib/utils';
+
 interface CycleRow {
   _id: string;
   name: string;
-  status: string;
+  status: 'draft' | 'active' | 'completed';
   startDate: string;
   endDate: string;
 }
@@ -26,11 +27,16 @@ interface ReviewRow {
   status: string;
 }
 
-const cycleSchema = z.object({
-  name: z.string().min(2),
-  startDate: z.string().min(1),
-  endDate: z.string().min(1),
-});
+const cycleSchema = z
+  .object({
+    name: z.string().min(2),
+    startDate: z.string().min(1),
+    endDate: z.string().min(1),
+  })
+  .refine((values) => new Date(values.endDate) >= new Date(values.startDate), {
+    path: ['endDate'],
+    message: 'End date must be after the start date',
+  });
 
 export const PerformancePage = () => {
   const queryClient = useQueryClient();
@@ -77,7 +83,31 @@ export const PerformancePage = () => {
         status: 'draft',
       });
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['review-cycles'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['review-cycles'] });
+      form.reset({
+        name: 'Quarterly Review',
+        startDate: toLocalDateTimeInputValue(new Date()),
+        endDate: toLocalDateTimeInputValue(new Date()),
+      });
+    },
+  });
+
+  const cycleActionMutation = useMutation({
+    mutationFn: async (payload: { id: string; action: 'activate' | 'complete' | 'delete' }) => {
+      if (payload.action === 'delete') {
+        await api.delete(`/performance/cycles/${payload.id}`);
+        return;
+      }
+
+      await api.patch(`/performance/cycles/${payload.id}`, {
+        status: payload.action === 'activate' ? 'active' : 'completed',
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['review-cycles'] });
+      queryClient.invalidateQueries({ queryKey: ['reviews'] });
+    },
   });
 
   if (dashboardQuery.isLoading || cyclesQuery.isLoading || reviewsQuery.isLoading) {
@@ -88,7 +118,10 @@ export const PerformancePage = () => {
     return <ErrorState label="Performance data could not be loaded." />;
   }
 
-  const mutationError = createCycleMutation.isError ? getApiErrorMessage(createCycleMutation.error, 'Review cycle could not be created.') : null;
+  const mutationError =
+    createCycleMutation.isError || cycleActionMutation.isError
+      ? getApiErrorMessage(createCycleMutation.error ?? cycleActionMutation.error, 'Performance action could not be completed.')
+      : null;
 
   return (
     <div className="space-y-6">
@@ -108,8 +141,9 @@ export const PerformancePage = () => {
             {createCycleMutation.isPending ? 'Saving...' : 'Save Cycle'}
           </Button>
         </form>
-        {createCycleMutation.isSuccess && <p className="text-sm text-emerald-600">Review cycle saved successfully.</p>}
-        {mutationError && <p className="text-sm text-red-500">{mutationError}</p>}
+        {form.formState.errors.endDate ? <p className="text-sm text-rose-300">{form.formState.errors.endDate.message}</p> : null}
+        {createCycleMutation.isSuccess && <p className="text-sm text-emerald-300">Review cycle saved successfully.</p>}
+        {mutationError ? <p className="text-sm text-rose-300">{mutationError}</p> : null}
       </Card>
       <div className="grid gap-6 xl:grid-cols-2">
         <DataTable<CycleRow>
@@ -120,6 +154,26 @@ export const PerformancePage = () => {
             { key: 'status', header: 'Status' },
             { key: 'startDate', header: 'Start', render: (item) => new Date(item.startDate).toLocaleDateString() },
             { key: 'endDate', header: 'End', render: (item) => new Date(item.endDate).toLocaleDateString() },
+            {
+              key: 'actions',
+              header: 'Actions',
+              render: (item) => (
+                <div className="flex flex-wrap gap-2">
+                  {item.status !== 'active' ? (
+                    <Button type="button" onClick={() => cycleActionMutation.mutate({ id: item._id, action: 'activate' })} disabled={cycleActionMutation.isPending}>
+                      Activate
+                    </Button>
+                  ) : (
+                    <Button type="button" onClick={() => cycleActionMutation.mutate({ id: item._id, action: 'complete' })} disabled={cycleActionMutation.isPending}>
+                      Mark complete
+                    </Button>
+                  )}
+                  <Button type="button" variant="outline" onClick={() => cycleActionMutation.mutate({ id: item._id, action: 'delete' })} disabled={cycleActionMutation.isPending}>
+                    Delete
+                  </Button>
+                </div>
+              ),
+            },
           ]}
         />
         <DataTable<ReviewRow>
