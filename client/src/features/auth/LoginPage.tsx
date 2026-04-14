@@ -141,7 +141,7 @@ export const LoginPage = () => {
             <div className="max-w-2xl">
               <p className="text-sm uppercase tracking-[0.24em] text-secondary">Meta Labs Tech</p>
               <h1 className="mt-4 text-5xl font-semibold leading-tight text-white">
-                A cleaner workspace for HR operations, payroll, approvals, and internal coordination.
+                A cleaner workspace for HR operations, payroll, approvals, and internal coordination. Updated today.
               </h1>
               <p className="mt-5 max-w-xl text-lg leading-8 text-white/68">
                 Sign in with your company account to access the records, approvals, updates, and workflows relevant to your role.
