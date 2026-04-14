@@ -1,3 +1,16 @@
+import express from 'express';
+import path from 'path';
+import cors from 'cors';
+import helmet from 'helmet';
+import morgan from 'morgan';
+import cookieParser from 'cookie-parser';
+import mongoSanitize from 'express-mongo-sanitize';
+import { env } from './config/env';
+import { generalRateLimiter } from './common/middleware/rateLimiter';
+import { errorHandler, notFoundHandler } from './common/middleware/errorHandler';
+import { logger } from './common/utils/logger';
+import { apiRouter } from './modules';
+
 export const createApp = (): express.Express => {
   const app = express();
 
