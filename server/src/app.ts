@@ -14,6 +14,9 @@ import { apiRouter } from './modules';
 export const createApp = (): express.Express => {
   const app = express();
 
+  // Railway runs behind a proxy
+  app.set('trust proxy', 1);
+
   app.use(helmet());
   app.use(
     cors({
@@ -26,7 +29,22 @@ export const createApp = (): express.Express => {
   app.use(express.urlencoded({ extended: true }));
   app.use(cookieParser(env.COOKIE_SECRET));
   app.use(mongoSanitize());
+
+  // Keep health check before rate limiting
+  app.get('/health', (_req, res) => {
+    res.status(200).json({
+      success: true,
+      message: 'Service is healthy',
+      data: { uptime: process.uptime() },
+    });
+  });
+
+  app.get('/', (_req, res) => {
+    res.status(200).json({ success: true, message: 'NEXUS HRMS API is running' });
+  });
+
   app.use(generalRateLimiter);
+
   app.use(
     '/uploads',
     express.static(path.resolve(env.UPLOAD_DIR), {
@@ -35,10 +53,6 @@ export const createApp = (): express.Express => {
       },
     }),
   );
-
-  app.get('/health', (_req, res) => {
-    res.json({ success: true, message: 'Service is healthy', data: { uptime: process.uptime() } });
-  });
 
   app.use('/api/v1', apiRouter);
   app.use(notFoundHandler);
