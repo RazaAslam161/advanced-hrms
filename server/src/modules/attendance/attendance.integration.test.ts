@@ -25,7 +25,9 @@ describe('attendance integration', () => {
       email: 'employee.portal@metalabstech.test',
     });
 
-    const checkInTimestamp = '2026-04-16T04:05:00.000Z';
+    const checkInDate = new Date();
+    checkInDate.setHours(4, 5, 0, 0);
+    const checkInTimestamp = checkInDate.toISOString();
     const checkIn = await request(ctx.app)
       .post('/api/v1/attendance/check-in')
       .set(bearerHeader(ctx, employeeAccount.user))
@@ -49,13 +51,15 @@ describe('attendance integration', () => {
 
     expect(duplicateCheckIn.status).toBe(409);
 
+    const checkOutDate = new Date();
+    checkOutDate.setHours(13, 5, 0, 0);
     const checkOut = await request(ctx.app)
       .post('/api/v1/attendance/check-out')
       .set(bearerHeader(ctx, employeeAccount.user))
       .send({
         lat: 31.5204,
         lng: 74.3587,
-        timestamp: '2026-04-16T13:05:00.000Z',
+        timestamp: checkOutDate.toISOString(),
       });
 
     expect(checkOut.status).toBe(200);
@@ -72,13 +76,18 @@ describe('attendance integration', () => {
     expect(dashboardResponse.body.data.totalCheckedOut).toBe(1);
     expect(dashboardResponse.body.data.live).toHaveLength(1);
 
+    const firstDayOfMonth = new Date();
+    firstDayOfMonth.setDate(1);
+    firstDayOfMonth.setHours(0, 0, 0, 0);
     const monthlyReport = await request(ctx.app)
       .get(`/api/v1/attendance/monthly/${employeeAccount.employee.id}`)
       .set(bearerHeader(ctx, employeeAccount.user))
-      .query({ month: '2026-04-01T00:00:00.000Z' });
+      .query({ month: firstDayOfMonth.toISOString() });
 
     expect(monthlyReport.status).toBe(200);
-    expect(monthlyReport.body.data[0].date).toBe('2026-04-16');
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    expect(monthlyReport.body.data[0].date).toBe(todayStr);
   });
 
   it('creates and updates attendance shifts through admin access', async () => {
@@ -131,13 +140,15 @@ describe('attendance integration', () => {
       email: 'zia.aslam@metalabstech.test',
     });
 
+    const checkInDate = new Date();
+    checkInDate.setHours(4, 0, 0, 0);
     const checkIn = await request(ctx.app)
       .post('/api/v1/attendance/check-in')
       .set(bearerHeader(ctx, employeeAccount.user))
       .send({
         lat: 31.5204,
         lng: 74.3587,
-        timestamp: '2026-04-16T04:00:00.000Z',
+        timestamp: checkInDate.toISOString(),
       });
 
     const overtimeRequest = await request(ctx.app)
