@@ -23,17 +23,21 @@ test('submits leave as an employee and approves it through manager and HR portal
   await page.getByRole('link', { name: /^leave$/i }).click();
   await expect(page).toHaveURL(/\/portal\/employee\/leave/);
 
-  const startDate = nextWeekdayAt(9, 0);
-  const endDate = nextWeekdayAt(18, 0);
-
   const dateInputs = page.locator('input[type="datetime-local"]');
-  await dateInputs.nth(0).fill(startDate);
-  await dateInputs.nth(1).fill(endDate);
-
+  await dateInputs.nth(0).fill(nextWeekdayAt(9, 0));
+  await dateInputs.nth(1).fill(nextWeekdayAt(18, 0));
   await page.getByPlaceholder('Reason for leave').fill(`QA leave submission ${Date.now()}`);
+
+  const leaveResponsePromise = page.waitForResponse(
+    (response) =>
+      response.url().includes('/api/v1/leave/apply') &&
+      response.request().method() === 'POST',
+  );
+
   await page.getByTestId('leave-submit').click();
 
-  await expect(page.getByText(/Leave request submitted successfully\./i)).toBeVisible();
+  const leaveResponse = await leaveResponsePromise;
+  expect(leaveResponse.ok(), await leaveResponse.text()).toBeTruthy();
 
   await signOut(page);
 
