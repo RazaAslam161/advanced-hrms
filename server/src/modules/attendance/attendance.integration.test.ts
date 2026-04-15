@@ -1,8 +1,15 @@
+import { format } from 'date-fns';
 import request from 'supertest';
 import type { IntegrationHarness } from '../../test/integration/harness';
 import { bearerHeader } from '../../test/integration/auth';
 import { createUserWithEmployee } from '../../test/integration/factories';
 import { createIntegrationHarness } from '../../test/integration/harness';
+
+const buildTimestampForToday = (hours: number, minutes = 0) => {
+  const value = new Date();
+  value.setHours(hours, minutes, 0, 0);
+  return value.toISOString();
+};
 
 describe('attendance integration', () => {
   let ctx: IntegrationHarness;
@@ -25,7 +32,9 @@ describe('attendance integration', () => {
       email: 'employee.portal@metalabstech.test',
     });
 
-    const checkInTimestamp = '2026-04-16T04:05:00.000Z';
+    const checkInTimestamp = buildTimestampForToday(4, 5);
+    const checkOutTimestamp = buildTimestampForToday(13, 5);
+
     const checkIn = await request(ctx.app)
       .post('/api/v1/attendance/check-in')
       .set(bearerHeader(ctx, employeeAccount.user))
@@ -55,30 +64,40 @@ describe('attendance integration', () => {
       .send({
         lat: 31.5204,
         lng: 74.3587,
-        timestamp: '2026-04-16T13:05:00.000Z',
+        timestamp: checkOutTimestamp,
       });
 
     expect(checkOut.status).toBe(200);
     expect(checkOut.body.data.totalHours).toBeCloseTo(9, 1);
 
-    const listResponse = await request(ctx.app).get('/api/v1/attendance').set(bearerHeader(ctx, employeeAccount.user));
+    const listResponse = await request(ctx.app)
+      .get('/api/v1/attendance')
+      .set(bearerHeader(ctx, employeeAccount.user));
+
     expect(listResponse.status).toBe(200);
     expect(listResponse.body.data).toHaveLength(1);
     expect(listResponse.body.data[0].employeeId.employeeId).toBe(employeeAccount.employee.employeeId);
 
-    const dashboardResponse = await request(ctx.app).get('/api/v1/attendance/dashboard').set(bearerHeader(ctx, employeeAccount.user));
+    const dashboardResponse = await request(ctx.app)
+      .get('/api/v1/attendance/dashboard')
+      .set(bearerHeader(ctx, employeeAccount.user));
+
     expect(dashboardResponse.status).toBe(200);
     expect(dashboardResponse.body.data.totalCheckedIn).toBe(0);
     expect(dashboardResponse.body.data.totalCheckedOut).toBe(1);
     expect(dashboardResponse.body.data.live).toHaveLength(1);
 
+    const monthStart = new Date(checkInTimestamp);
+    monthStart.setDate(1);
+    monthStart.setHours(0, 0, 0, 0);
+
     const monthlyReport = await request(ctx.app)
       .get(`/api/v1/attendance/monthly/${employeeAccount.employee.id}`)
       .set(bearerHeader(ctx, employeeAccount.user))
-      .query({ month: '2026-04-01T00:00:00.000Z' });
+      .query({ month: monthStart.toISOString() });
 
     expect(monthlyReport.status).toBe(200);
-    expect(monthlyReport.body.data[0].date).toBe('2026-04-16');
+    expect(monthlyReport.body.data[0].date).toBe(format(new Date(checkInTimestamp), 'yyyy-MM-dd'));
   });
 
   it('creates and updates attendance shifts through admin access', async () => {
@@ -104,7 +123,10 @@ describe('attendance integration', () => {
     expect(createShift.status).toBe(201);
     expect(createShift.body.data.code).toBe('EVE');
 
-    const listShifts = await request(ctx.app).get('/api/v1/attendance/shifts').set(bearerHeader(ctx, adminAccount.user));
+    const listShifts = await request(ctx.app)
+      .get('/api/v1/attendance/shifts')
+      .set(bearerHeader(ctx, adminAccount.user));
+
     expect(listShifts.status).toBe(200);
     expect(listShifts.body.data).toHaveLength(1);
 
@@ -126,6 +148,7 @@ describe('attendance integration', () => {
       role: 'employee',
       email: 'employee.portal@metalabstech.test',
     });
+
     const approverAccount = await createUserWithEmployee(ctx, {
       role: 'superAdmin',
       email: 'zia.aslam@metalabstech.test',
@@ -137,7 +160,7 @@ describe('attendance integration', () => {
       .send({
         lat: 31.5204,
         lng: 74.3587,
-        timestamp: '2026-04-16T04:00:00.000Z',
+        timestamp: buildTimestampForToday(4, 0),
       });
 
     const overtimeRequest = await request(ctx.app)
@@ -160,7 +183,10 @@ describe('attendance integration', () => {
     expect(approveRequest.status).toBe(200);
     expect(approveRequest.body.data.status).toBe('approved');
 
-    const approverDashboard = await request(ctx.app).get('/api/v1/attendance/dashboard').set(bearerHeader(ctx, approverAccount.user));
+    const approverDashboard = await request(ctx.app)
+      .get('/api/v1/attendance/dashboard')
+      .set(bearerHeader(ctx, approverAccount.user));
+
     expect(approverDashboard.status).toBe(200);
     expect(approverDashboard.body.data.totalCheckedIn).toBe(1);
   });
