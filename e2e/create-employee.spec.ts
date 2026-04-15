@@ -1,6 +1,11 @@
 import { expect, test } from '@playwright/test';
 import { loginAs, signOut } from './helpers';
 
+const pad = (value: number) => String(value).padStart(2, '0');
+
+const toLocalDateTimeInputValue = (date: Date) =>
+  `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+
 test('creates an employee account and uses the issued credentials to sign in', async ({ page }) => {
   const uniqueEmail = `qa.employee.${Date.now()}@metalabstech.com`;
 
@@ -11,12 +16,30 @@ test('creates an employee account and uses the issued credentials to sign in', a
   await page.getByPlaceholder('First name').fill('Qa');
   await page.getByPlaceholder('Last name').fill('Employee');
   await page.getByPlaceholder('Work email').fill(uniqueEmail);
-  await page.locator('select').nth(1).selectOption({ index: 1 });
+
+  const selects = page.locator('select');
+  await selects.nth(1).selectOption({ index: 1 });
+
+  const joiningDate = new Date();
+  joiningDate.setDate(joiningDate.getDate() + 1);
+  joiningDate.setHours(9, 0, 0, 0);
+  await page.locator('input[type="datetime-local"]').first().fill(toLocalDateTimeInputValue(joiningDate));
+
   await page.getByPlaceholder('Designation').fill('QA Engineer');
   await page.getByPlaceholder('Basic salary').fill('150000');
+
+  const createResponsePromise = page.waitForResponse(
+    (response) =>
+      response.url().includes('/api/v1/employees') &&
+      response.request().method() === 'POST',
+  );
+
   await page.getByTestId('employee-create-submit').click();
 
-  await expect(page.getByText('Employee account created successfully.')).toBeVisible();
+  const createResponse = await createResponsePromise;
+  expect(createResponse.ok(), await createResponse.text()).toBeTruthy();
+
+  await expect(page.getByTestId('issued-credentials-card')).toBeVisible();
   await expect(page.getByTestId('issued-credentials-email')).toHaveText(uniqueEmail);
 
   const temporaryPassword = (await page.getByTestId('issued-credentials-password').textContent())?.trim();
