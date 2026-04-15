@@ -142,7 +142,7 @@ export const LeavePage = () => {
               ? 'Super Admin can create leave requests on behalf of employees.'
               : 'Support for half-day requests, balance checks, and multi-step approvals.'}
           </p>
-          <form className="mt-4 space-y-3" onSubmit={form.handleSubmit((values) => applyMutation.mutate(values))}>
+          <form data-testid="leave-request-form" className="mt-4 space-y-3" onSubmit={form.handleSubmit((values) => applyMutation.mutate(values))}>
             {canApplyOnBehalf ? (
               <select className="w-full rounded-2xl border border-white/10 bg-white/6 px-4 py-3 text-sm text-white" {...form.register('employeeId')}>
                 <option value="">{user?.role === 'superAdmin' ? 'Select employee' : 'Create for myself or select employee'}</option>
@@ -168,7 +168,7 @@ export const LeavePage = () => {
               Half day leave
             </label>
             <Textarea placeholder="Reason for leave" {...form.register('reason')} />
-            <Button type="submit" disabled={applyMutation.isPending || superAdminSelectionMissing}>
+            <Button data-testid="leave-submit" type="submit" disabled={applyMutation.isPending || superAdminSelectionMissing}>
               {applyMutation.isPending ? 'Submitting...' : canApplyOnBehalf ? 'Submit leave request' : 'Submit Leave Request'}
             </Button>
             {superAdminSelectionMissing ? <p className="text-sm text-amber-200">Select an employee before creating a leave request from the Super Admin portal.</p> : null}

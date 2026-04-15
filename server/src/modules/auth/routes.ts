@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { authenticate } from '../../common/middleware/auth';
 import { authorize } from '../../common/middleware/rbac';
-import { authRateLimiter } from '../../common/middleware/rateLimiter';
+import { authRateLimiter, refreshRateLimiter } from '../../common/middleware/rateLimiter';
 import { validate } from '../../common/middleware/validate';
 import {
   changePassword,
@@ -25,7 +25,7 @@ const router = Router();
 
 router.post('/register', authRateLimiter, authenticate, authorize(['superAdmin', 'admin'], ['auth.register']), validate({ body: registerSchema }), register);
 router.post('/login', authRateLimiter, validate({ body: loginSchema }), login);
-router.post('/refresh', authRateLimiter, refresh);
+router.post('/refresh', refreshRateLimiter, refresh);
 router.post('/logout', logout);
 router.post('/mfa/setup', authenticate, setupMfa);
 router.post('/mfa/verify', authenticate, validate({ body: mfaVerifySchema }), verifyMfa);

@@ -60,6 +60,7 @@ export const verifyMfa = asyncHandler(async (req: AuthenticatedRequest, res: Res
 
 export const changePassword = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const result = await AuthService.changePassword(req.user!.userId, req.body.currentPassword, req.body.newPassword);
+  res.clearCookie('refreshToken');
   res.json(sendSuccess('Password updated successfully', result));
 });
 
@@ -85,12 +86,12 @@ export const listUsers = asyncHandler(async (_req: AuthenticatedRequest, res: Re
 });
 
 export const resetPassword = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-  const result = await AuthService.resetPassword(String(req.params.id));
+  const result = await AuthService.resetPassword(req.user!.userId, req.user!.role, String(req.params.id));
   res.json(sendSuccess('Temporary password issued successfully', result));
 });
 
 export const updateUserAccess = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-  const result = await AuthService.updateUserAccess(String(req.params.id), req.body);
+  const result = await AuthService.updateUserAccess(req.user!.userId, req.user!.role, String(req.params.id), req.body);
   res.json(sendSuccess('User access updated successfully', result));
 });
 

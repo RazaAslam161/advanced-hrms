@@ -1,6 +1,7 @@
 import { Worker } from 'bullmq';
 import { getRedisClient } from '../config/redis';
 import { logger } from '../common/utils/logger';
+import { processPayslipNotification, processPayrollRun } from '../modules/payroll/service';
 
 export const registerWorkers = (): void => {
   const connection = getRedisClient();
@@ -9,7 +10,7 @@ export const registerWorkers = (): void => {
     return;
   }
 
-  new Worker('payroll', async () => undefined, { connection });
+  new Worker('payroll', async (job) => processPayrollRun(String(job.data.payrollRunId)), { connection });
   new Worker('reports', async () => undefined, { connection });
-  new Worker('emails', async () => undefined, { connection });
+  new Worker('emails', async (job) => processPayslipNotification(String(job.data.notificationId)), { connection });
 };

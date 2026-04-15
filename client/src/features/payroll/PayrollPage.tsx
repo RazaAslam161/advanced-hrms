@@ -119,10 +119,10 @@ export const PayrollPage = () => {
       {canProcessPayroll ? (
         <Card className="space-y-4">
           <h3 className="text-lg font-semibold text-white">Process monthly payroll</h3>
-          <form className="flex flex-col gap-3 md:flex-row" onSubmit={form.handleSubmit((values) => processMutation.mutate(values))}>
+          <form data-testid="payroll-run-form" className="flex flex-col gap-3 md:flex-row" onSubmit={form.handleSubmit((values) => processMutation.mutate(values))}>
             <Input placeholder="Month" {...form.register('month')} />
             <Input type="number" placeholder="Year" {...form.register('year')} />
-            <Button type="submit" disabled={processMutation.isPending}>
+            <Button data-testid="payroll-run-submit" type="submit" disabled={processMutation.isPending}>
               {processMutation.isPending ? 'Processing...' : 'Run Payroll'}
             </Button>
           </form>

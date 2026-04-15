@@ -2,6 +2,8 @@ import type { FilterQuery, Model } from 'mongoose';
 import type { PaginationMeta } from '../types/http';
 import { resolvePagination } from './pagination';
 
+export const escapeRegex = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 export const buildPaginationMeta = (page: number, limit: number, total: number): PaginationMeta => ({
   page,
   limit,

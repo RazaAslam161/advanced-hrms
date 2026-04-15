@@ -11,7 +11,7 @@ export const listNotifications = asyncHandler(async (req: AuthenticatedRequest, 
 });
 
 export const markNotification = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-  const notification = await NotificationService.mark(String(req.params.id), req.body.read);
+  const notification = await NotificationService.mark(String(req.params.id), req.body.read, req.user!.userId);
   res.json(sendSuccess('Notification updated successfully', notification));
 });
 

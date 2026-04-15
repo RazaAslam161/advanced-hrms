@@ -1,5 +1,5 @@
 import { AppError } from '../../common/utils/appError';
-import { paginatedFetch } from '../../common/utils/query';
+import { escapeRegex, paginatedFetch } from '../../common/utils/query';
 import { DepartmentModel } from './model';
 
 export class DepartmentService {
@@ -9,8 +9,8 @@ export class DepartmentService {
       ...(query.search
         ? {
             $or: [
-              { name: { $regex: query.search, $options: 'i' } },
-              { code: { $regex: query.search, $options: 'i' } },
+              { name: { $regex: escapeRegex(query.search), $options: 'i' } },
+              { code: { $regex: escapeRegex(query.search), $options: 'i' } },
             ],
           }
         : {}),

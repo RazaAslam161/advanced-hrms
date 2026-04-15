@@ -15,6 +15,7 @@ export const userSchema = new Schema(
     lastName: { type: String, required: true, trim: true },
     mustChangePassword: { type: Boolean, default: false },
     tempPasswordIssuedAt: { type: Date },
+    tokenVersion: { type: Number, default: 0 },
   },
   { timestamps: true },
 );

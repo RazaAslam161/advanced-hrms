@@ -15,8 +15,12 @@ export class NotificationService {
     return NotificationModel.find({ $or: [{ userId }, { userId: { $exists: false } }] }).sort({ createdAt: -1 }).lean();
   }
 
-  static async mark(id: string, read: boolean) {
-    const notification = await NotificationModel.findByIdAndUpdate(id, { read }, { new: true });
+  static async mark(id: string, read: boolean, userId: string) {
+    const notification = await NotificationModel.findOneAndUpdate(
+      { _id: id, $or: [{ userId }, { userId: { $exists: false } }] },
+      { read },
+      { new: true },
+    );
     if (!notification) {
       throw new AppError('Notification not found', 404);
     }

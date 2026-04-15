@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { io, type Socket } from 'socket.io-client';
+import { getClientEnv } from '../lib/env';
 import { useAuthStore } from '../store/authStore';
 import { useNotificationStore } from '../store/notificationStore';
 
@@ -14,7 +15,7 @@ export const useSocket = () => {
       return;
     }
 
-    socket = io(import.meta.env.VITE_SOCKET_URL ?? 'http://localhost:4001', {
+    socket = io(getClientEnv('VITE_SOCKET_URL', 'http://localhost:4001'), {
       auth: { token: accessToken },
     });
 

@@ -192,6 +192,7 @@ export const EmployeePage = () => {
               <p className="text-sm text-white/55">Create the employee profile, issue unique credentials, or update role and status from the same workspace.</p>
             </div>
             <form
+              data-testid="employee-create-form"
               className="grid gap-3 md:grid-cols-2 xl:grid-cols-3"
               onSubmit={form.handleSubmit((values) => {
                 const payload = {
@@ -249,7 +250,7 @@ export const EmployeePage = () => {
               <Input type="number" placeholder="Medical" {...form.register('salary.medical')} />
               <Input type="number" placeholder="Transport" {...form.register('salary.transport')} />
               <div className="flex gap-3 md:col-span-2 xl:col-span-3">
-                <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending}>
+                <Button data-testid="employee-create-submit" type="submit" disabled={createMutation.isPending || updateMutation.isPending}>
                   {editingEmployeeId
                     ? updateMutation.isPending
                       ? 'Saving employee...'
@@ -283,12 +284,12 @@ export const EmployeePage = () => {
               <p className="text-sm text-white/55">Temporary passwords are generated automatically so each individual gets a unique login on first access.</p>
             </div>
             {issuedCredentials ? (
-              <div className="rounded-[1.4rem] border border-primary/30 bg-primary/10 p-5">
+              <div data-testid="issued-credentials-card" className="rounded-[1.4rem] border border-primary/30 bg-primary/10 p-5">
                 <p className="text-xs uppercase tracking-[0.24em] text-secondary">{issuedCredentials.role} portal</p>
                 <p className="mt-4 text-sm text-white/55">Email</p>
-                <p className="font-medium text-white">{issuedCredentials.email}</p>
+                <p data-testid="issued-credentials-email" className="font-medium text-white">{issuedCredentials.email}</p>
                 <p className="mt-4 text-sm text-white/55">Temporary password</p>
-                <p className="font-medium text-white">{issuedCredentials.password}</p>
+                <p data-testid="issued-credentials-password" className="font-medium text-white">{issuedCredentials.password}</p>
               </div>
             ) : (
               <div className="rounded-[1.4rem] border border-dashed border-white/10 bg-white/[0.03] p-5 text-sm text-white/55">

@@ -164,6 +164,7 @@ export const Navbar = ({ portal }: { portal: PortalConfig }) => {
           <div ref={dropdownRef} className="relative">
             <button
               type="button"
+              data-testid="navbar-avatar-button"
               className="flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-2 py-1.5 text-left transition hover:bg-white/8"
               onClick={() => setMenuOpen((currentState) => !currentState)}
               aria-haspopup="menu"
@@ -220,6 +221,7 @@ export const Navbar = ({ portal }: { portal: PortalConfig }) => {
                   </button>
                   <button
                     type="button"
+                    data-testid="navbar-sign-out"
                     className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-rose-200 transition hover:bg-rose-500/10 hover:text-rose-100"
                     disabled={logoutMutation.isPending}
                     onClick={() => logoutMutation.mutate()}

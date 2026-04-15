@@ -194,6 +194,7 @@ export const LoginPage = () => {
             <form className="space-y-4" onSubmit={handleSubmit((values) => loginMutation.mutate(values))}>
               <div className="relative">
                 <Input
+                  data-testid="login-email"
                   placeholder="Work email"
                   {...emailRegister}
                   onFocus={openSuggestions}
@@ -232,7 +233,13 @@ export const LoginPage = () => {
               </div>
 
               <div className="relative">
-                <Input type={showPassword ? 'text' : 'password'} placeholder="Password" className="pr-11" {...register('password')} />
+                <Input
+                  data-testid="login-password"
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="Password"
+                  className="pr-11"
+                  {...register('password')}
+                />
                 <button
                   type="button"
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-white/42 transition hover:text-white/70"
@@ -247,7 +254,7 @@ export const LoginPage = () => {
 
               {loginMutation.isError ? <p className="text-sm text-rose-300">{loginErrorMessage || 'Unable to sign in.'}</p> : null}
 
-              <Button className="w-full justify-center" type="submit" disabled={loginMutation.isPending}>
+              <Button data-testid="login-submit" className="w-full justify-center" type="submit" disabled={loginMutation.isPending}>
                 {loginMutation.isPending ? 'Signing in...' : 'Continue'}
                 {!loginMutation.isPending ? <ArrowRight className="ml-2 h-4 w-4" /> : null}
               </Button>

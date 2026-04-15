@@ -22,6 +22,7 @@ export const roleDefaults: Record<Role, string[]> = {
     'employees.update',
     'employees.delete',
     'employees.import',
+    'employees.upload',
     'departments.read',
     'departments.create',
     'departments.update',
@@ -42,6 +43,7 @@ export const roleDefaults: Record<Role, string[]> = {
     'payroll.read',
     'payroll.process',
     'payroll.approve',
+    'payroll.export',
     'recruitment.read',
     'recruitment.manage',
     'analytics.read',
@@ -97,6 +99,9 @@ export const roleDefaults: Record<Role, string[]> = {
 };
 
 const hashToken = (token: string): string => crypto.createHash('sha256').update(token).digest('hex');
+const revokeUserSessions = async (userId: string) => {
+  await AuthSessionModel.updateMany({ userId, revokedAt: { $exists: false } }, { revokedAt: new Date() });
+};
 export const generateTemporaryPassword = (): string => {
   const segment = crypto.randomBytes(4).toString('hex');
   return `Meta${segment.slice(0, 2).toUpperCase()}!${segment.slice(2)}9`;
@@ -221,6 +226,21 @@ const serializeSession = (session: {
   active: !session.revokedAt && session.expiresAt > new Date(),
 });
 
+const buildTokenPayload = (user: {
+  id?: string;
+  _id?: { toString(): string } | string;
+  email: string;
+  role: Role;
+  permissions: string[];
+  tokenVersion: number;
+}) => ({
+  userId: user.id ?? (typeof user._id === 'string' ? user._id : user._id?.toString() ?? ''),
+  email: user.email,
+  role: user.role,
+  permissions: user.permissions,
+  tokenVersion: user.tokenVersion,
+});
+
 export class AuthService {
   static async register(input: {
     email: string;
@@ -302,10 +322,7 @@ export class AuthService {
 
     const jti = uuid();
     const refreshToken = signRefreshToken({
-      userId: user.id,
-      email: user.email,
-      role: user.role,
-      permissions: user.permissions,
+      ...buildTokenPayload(user),
       jti,
     });
 
@@ -333,12 +350,7 @@ export class AuthService {
     });
 
     return {
-      accessToken: signAccessToken({
-        userId: user.id,
-        email: user.email,
-        role: user.role,
-        permissions: user.permissions,
-      }),
+      accessToken: signAccessToken(buildTokenPayload(user)),
       refreshToken,
       user: { ...serializeUser(user), mfaEnabled: user.mfaEnabled },
     };
@@ -365,13 +377,20 @@ export class AuthService {
       throw new AppError('User no longer exists', 404);
     }
 
+    if (!user.isActive) {
+      await revokeUserSessions(user.id);
+      throw new AppError('Account is inactive', 403);
+    }
+
+    if (user.tokenVersion !== payload.tokenVersion) {
+      await AuthSessionModel.updateOne({ _id: session._id }, { revokedAt: new Date() });
+      throw new AppError('Refresh session is no longer valid', 401);
+    }
+
     session.revokedAt = new Date();
     const newJti = uuid();
     const refreshToken = signRefreshToken({
-      userId: user.id,
-      email: user.email,
-      role: user.role,
-      permissions: user.permissions,
+      ...buildTokenPayload(user),
       jti: newJti,
     });
     session.replacedByToken = newJti;
@@ -385,12 +404,7 @@ export class AuthService {
     });
 
     return {
-      accessToken: signAccessToken({
-        userId: user.id,
-        email: user.email,
-        role: user.role,
-        permissions: user.permissions,
-      }),
+      accessToken: signAccessToken(buildTokenPayload(user)),
       refreshToken,
       user: { ...serializeUser(user), mfaEnabled: user.mfaEnabled },
     };
@@ -468,7 +482,9 @@ export class AuthService {
     user.password = await hashPassword(newPassword);
     user.mustChangePassword = false;
     user.tempPasswordIssuedAt = undefined;
+    user.tokenVersion += 1;
     await user.save();
+    await revokeUserSessions(user.id);
     await createAuditLog({
       actorId: userId,
       module: 'auth',
@@ -488,19 +504,29 @@ export class AuthService {
     return users.map((user) => serializeUser(user));
   }
 
-  static async resetPassword(userId: string) {
+  static async resetPassword(actorUserId: string, actorRole: Role, userId: string) {
     const user = await UserModel.findById(userId);
     if (!user) {
       throw new AppError('User not found', 404);
+    }
+
+    if (actorUserId === user.id) {
+      throw new AppError('Use change password for your own account', 400);
+    }
+
+    if (actorRole !== 'superAdmin' && ['superAdmin', 'admin'].includes(user.role)) {
+      throw new AppError('Only the Super Admin can reset privileged accounts', 403);
     }
 
     const generatedPassword = generateTemporaryPassword();
     user.password = await hashPassword(generatedPassword);
     user.mustChangePassword = true;
     user.tempPasswordIssuedAt = new Date();
+    user.tokenVersion += 1;
     await user.save();
+    await revokeUserSessions(user.id);
     await createAuditLog({
-      actorId: userId,
+      actorId: actorUserId,
       module: 'auth',
       action: 'password.reset',
       entityType: 'User',
@@ -515,19 +541,47 @@ export class AuthService {
   }
 
   static async updateUserAccess(
+    actorUserId: string,
+    actorRole: Role,
     userId: string,
     input: {
       permissions?: string[];
       isActive?: boolean;
     },
   ) {
-    const user = await UserModel.findById(userId);
+    const [actor, user] = await Promise.all([UserModel.findById(actorUserId), UserModel.findById(userId)]);
+    if (!actor) {
+      throw new AppError('Actor not found', 404);
+    }
     if (!user) {
       throw new AppError('User not found', 404);
     }
 
+    if (actorRole === 'admin' && ['admin', 'superAdmin'].includes(user.role)) {
+      throw new AppError('HR Admin cannot manage privileged accounts', 403);
+    }
+
+    if (input.permissions) {
+      if (actorRole !== 'superAdmin') {
+        throw new AppError('Only the Super Admin can change permissions', 403);
+      }
+
+      if (actorUserId === user.id) {
+        throw new AppError('You cannot change your own permissions', 400);
+      }
+
+      const permissionSet = new Set(allPermissions);
+      const invalidPermission = input.permissions.find((permission) => !permissionSet.has(permission));
+      if (invalidPermission) {
+        throw new AppError(`Invalid permission: ${invalidPermission}`, 422);
+      }
+    }
+
+    let revokeSessions = false;
+
     if (typeof input.isActive === 'boolean') {
       user.isActive = input.isActive;
+      revokeSessions = true;
       await EmployeeModel.updateOne(
         { userId: user._id },
         {
@@ -538,9 +592,14 @@ export class AuthService {
 
     if (input.permissions) {
       user.permissions = Array.from(new Set(input.permissions));
+      user.tokenVersion += 1;
+      revokeSessions = true;
     }
 
     await user.save();
+    if (revokeSessions) {
+      await revokeUserSessions(user.id);
+    }
 
     return serializeUser(user);
   }
@@ -563,13 +622,16 @@ export class AuthService {
 
     currentUser.role = 'admin';
     currentUser.permissions = roleDefaults.admin;
+    currentUser.tokenVersion += 1;
 
     targetUser.role = 'superAdmin';
     targetUser.permissions = allPermissions;
     targetUser.mustChangePassword = true;
     targetUser.tempPasswordIssuedAt = new Date();
+    targetUser.tokenVersion += 1;
 
     await Promise.all([currentUser.save(), targetUser.save()]);
+    await Promise.all([revokeUserSessions(currentUser.id), revokeUserSessions(targetUser.id)]);
     await createAuditLog({
       actorId: currentUserId,
       module: 'auth',

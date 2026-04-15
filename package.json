@@ -11,6 +11,15 @@
     "build": "npm run build --workspaces",
     "typecheck": "npm run typecheck --workspaces",
     "test": "npm run test --workspaces",
-    "seed": "npm --workspace server run seed"
+    "seed": "npm --workspace server run seed",
+    "test:server:coverage": "npm --workspace server run test:coverage",
+    "test:client:coverage": "npm --workspace client run test:coverage",
+    "e2e:server": "npx cross-env NODE_ENV=development CLIENT_URL=http://127.0.0.1:4173 MONGODB_URI=mongodb://127.0.0.1:27017/nexus-hrms-e2e QUEUE_DRIVER=inline FILE_STORAGE_DRIVER=local UPLOAD_DIR=./server/uploads-e2e npm --workspace server run seed && npx cross-env NODE_ENV=development CLIENT_URL=http://127.0.0.1:4173 MONGODB_URI=mongodb://127.0.0.1:27017/nexus-hrms-e2e QUEUE_DRIVER=inline FILE_STORAGE_DRIVER=local UPLOAD_DIR=./server/uploads-e2e npm --workspace server run dev:api",
+    "e2e:client": "npm --workspace client run build && npm --workspace client run preview -- --host 127.0.0.1 --port 4173",
+    "test:e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.54.2",
+    "cross-env": "^10.1.0"
   }
 }

@@ -29,8 +29,8 @@ export const createLoanAdvance = asyncHandler(async (req: Request, res: Response
   res.status(201).json(sendSuccess('Loan or advance created successfully', entry));
 });
 
-export const getPayslip = asyncHandler(async (req: Request, res: Response) => {
-  const buffer = await PayrollService.generatePayslip(String(req.params.id));
+export const getPayslip = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const buffer = await PayrollService.generatePayslip(String(req.params.id), req.user);
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename="payslip-${req.params.id}.pdf"`);
   res.send(buffer);

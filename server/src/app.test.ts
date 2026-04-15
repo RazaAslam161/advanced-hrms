@@ -29,7 +29,7 @@ describe('NEXUS API', () => {
   });
 
   it('serves uploaded assets with a cross-origin resource policy that allows portal rendering', async () => {
-    const relativeAssetPath = path.join('avatars', 'test-avatar.png');
+    const relativeAssetPath = path.join('public', 'avatars', 'test-avatar.png');
     const absoluteAssetPath = path.join(env.UPLOAD_DIR, relativeAssetPath);
 
     await fs.mkdir(path.dirname(absoluteAssetPath), { recursive: true });
@@ -39,6 +39,21 @@ describe('NEXUS API', () => {
       const response = await request(createApp()).get(`/uploads/${relativeAssetPath.replace(/\\/g, '/')}`);
       expect(response.status).toBe(200);
       expect(response.headers['cross-origin-resource-policy']).toBe('cross-origin');
+    } finally {
+      await fs.rm(absoluteAssetPath, { force: true });
+    }
+  });
+
+  it('does not expose private uploads over the public static path', async () => {
+    const relativeAssetPath = path.join('private', 'resumes', 'secret.pdf');
+    const absoluteAssetPath = path.join(env.UPLOAD_DIR, relativeAssetPath);
+
+    await fs.mkdir(path.dirname(absoluteAssetPath), { recursive: true });
+    await fs.writeFile(absoluteAssetPath, Buffer.from('%PDF-1.4'));
+
+    try {
+      const response = await request(createApp()).get(`/uploads/${relativeAssetPath.replace(/\\/g, '/')}`);
+      expect(response.status).toBe(404);
     } finally {
       await fs.rm(absoluteAssetPath, { force: true });
     }

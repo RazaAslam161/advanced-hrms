@@ -38,6 +38,7 @@ describe('JWT fallback keys', () => {
       email: 'zia.aslam@metalabstech.com',
       role: 'superAdmin',
       permissions: ['auth.register'],
+      tokenVersion: 0,
       jti: 'refresh-1',
     });
 

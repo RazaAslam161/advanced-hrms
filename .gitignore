@@ -1,6 +1,8 @@
 node_modules
 dist
 coverage
+playwright-report
+test-results
 .env
 .env.local
 .env.production
@@ -9,7 +11,7 @@ Thumbs.db
 uploads
 server/logs
 server/uploads
+server/uploads-e2e
 server/.runtime
 client/dist
-package-lock.json
 *.log

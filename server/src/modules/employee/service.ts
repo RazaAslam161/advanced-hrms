@@ -4,8 +4,8 @@ import { env } from '../../config/env';
 import { UserModel } from '../auth/model';
 import { hashPassword } from '../../common/utils/password';
 import { AppError } from '../../common/utils/appError';
-import { paginatedFetch } from '../../common/utils/query';
-import { persistUpload } from '../../common/utils/storage';
+import { escapeRegex, paginatedFetch } from '../../common/utils/query';
+import { persistBuffer, persistUpload } from '../../common/utils/storage';
 import { createAuditLog } from '../../common/utils/audit';
 import { createWorkbookBuffer, loadWorkbookFromBuffer } from '../../common/utils/excel';
 import { generateTemporaryPassword, resolveRolePermissions } from '../auth/service';
@@ -149,10 +149,10 @@ export class EmployeeService {
       ...(query.search
         ? {
             $or: [
-              { firstName: { $regex: query.search, $options: 'i' } },
-              { lastName: { $regex: query.search, $options: 'i' } },
-              { employeeId: { $regex: query.search, $options: 'i' } },
-              { email: { $regex: query.search, $options: 'i' } },
+              { firstName: { $regex: escapeRegex(query.search), $options: 'i' } },
+              { lastName: { $regex: escapeRegex(query.search), $options: 'i' } },
+              { employeeId: { $regex: escapeRegex(query.search), $options: 'i' } },
+              { email: { $regex: escapeRegex(query.search), $options: 'i' } },
             ],
           }
         : {}),
@@ -451,12 +451,14 @@ export class EmployeeService {
         reportSheet.addRow(['Row', 'Message']);
         errors.forEach((entry) => reportSheet.addRow([entry.row, entry.message]));
       });
-
-      const reportsDir = path.resolve(process.cwd(), 'uploads', 'imports');
-      await fs.mkdir(reportsDir, { recursive: true });
-      const filename = `employee-import-errors-${Date.now()}.xlsx`;
-      await fs.writeFile(path.join(reportsDir, filename), report);
-      errorReportUrl = `/uploads/imports/${filename}`;
+      const asset = await persistBuffer(
+        report,
+        `employee-import-errors-${Date.now()}.xlsx`,
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'imports',
+        false,
+      );
+      errorReportUrl = asset.url;
     }
 
     return { imported, failed: errors.length, errors, errorReportUrl };

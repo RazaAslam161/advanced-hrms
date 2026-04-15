@@ -17,6 +17,7 @@ import {
   Users,
 } from 'lucide-react';
 import type { User } from '../types';
+import { getClientEnv } from './env';
 
 export type UserRole = User['role'];
 
@@ -123,4 +124,4 @@ export const canAccessPortalSlug = (user: User | null, slug: string) =>
 export const getPortalLabelFromPath = (user: User | null, pathname: string) =>
   getPortalNavItems(user).find((item) => item.path === pathname)?.label ?? 'Dashboard';
 
-export const apiBaseUrl = import.meta.env.VITE_API_URL ?? 'http://localhost:4001/api/v1';
+export const apiBaseUrl = getClientEnv('VITE_API_URL', 'http://localhost:4001/api/v1');

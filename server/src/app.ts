@@ -40,8 +40,8 @@ export const createApp = (): express.Express => {
   app.use(generalRateLimiter);
 
   app.use(
-    '/uploads',
-    express.static(path.resolve(env.UPLOAD_DIR), {
+    '/uploads/public',
+    express.static(path.resolve(env.UPLOAD_DIR, 'public'), {
       setHeaders: (res) => {
         res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
       },

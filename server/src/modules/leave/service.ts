@@ -16,7 +16,15 @@ const defaultPolicies = [
 const ensurePolicies = async () => {
   const count = await LeavePolicyModel.countDocuments();
   if (count === 0) {
-    await LeavePolicyModel.insertMany(defaultPolicies);
+    await Promise.all(
+      defaultPolicies.map((policy) =>
+        LeavePolicyModel.updateOne(
+          { leaveType: policy.leaveType },
+          { $setOnInsert: policy },
+          { upsert: true },
+        ),
+      ),
+    );
   }
 };
 

@@ -2,13 +2,15 @@ import { createDocumentBuffer, renderBrandedHeader } from '../../common/utils/pd
 import { createWorkbookBuffer } from '../../common/utils/excel';
 import { computePayroll } from '../../common/utils/tax';
 import { AppError } from '../../common/utils/appError';
+import { logger } from '../../common/utils/logger';
 import type { JwtUserPayload } from '../../common/utils/jwt';
 import { emailQueue, payrollQueue } from '../../jobs/queues';
 import { EmployeeModel } from '../employee/model';
 import { LoanAdvanceModel, PayrollRecordModel, PayrollRunModel } from './model';
-import { NotificationModel } from '../notification/model';
+import { NotificationModel, NotificationPreferenceModel } from '../notification/model';
+import { UserModel } from '../auth/model';
 
-const processRun = async (payrollRunId: string): Promise<void> => {
+export const processPayrollRun = async (payrollRunId: string): Promise<void> => {
   const run = await PayrollRunModel.findById(payrollRunId);
   if (!run) {
     throw new AppError('Payroll run not found', 404);
@@ -65,6 +67,32 @@ const processRun = async (payrollRunId: string): Promise<void> => {
   await run.save();
 };
 
+export const processPayslipNotification = async (notificationId: string): Promise<void> => {
+  const notification = await NotificationModel.findById(notificationId).lean();
+  if (!notification?.userId || !notification.channels.includes('email')) {
+    return;
+  }
+
+  const [user, preferences] = await Promise.all([
+    UserModel.findById(notification.userId).select('email').lean(),
+    NotificationPreferenceModel.findOne({ userId: notification.userId }).lean(),
+  ]);
+
+  if (!user?.email) {
+    return;
+  }
+
+  const payrollEmailEnabled =
+    (preferences?.preferences as { payroll?: { email?: boolean } } | undefined)?.payroll?.email ?? true;
+
+  if (!payrollEmailEnabled) {
+    return;
+  }
+
+  const { NotificationService } = await import('../notification/service');
+  await NotificationService.sendEmailNotification(user.email, notification.title, notification.message);
+};
+
 export class PayrollService {
   static async listRuns() {
     return PayrollRunModel.find().sort({ year: -1, month: -1 }).lean();
@@ -72,7 +100,7 @@ export class PayrollService {
 
   static async listRecords(query: { payrollRunId?: string; employeeId?: string }, requester?: JwtUserPayload) {
     let scopedEmployeeId = query.employeeId;
-    if (requester?.role === 'employee') {
+    if (requester && requester.role !== 'superAdmin' && requester.role !== 'admin') {
       const employee = await EmployeeModel.findOne({ userId: requester.userId, isDeleted: false }).select('_id');
       if (!employee) {
         throw new AppError('Employee profile not found', 404);
@@ -97,7 +125,7 @@ export class PayrollService {
     });
 
     await payrollQueue.add('process-payroll', { payrollRunId: run.id }, async ({ payrollRunId }) => {
-      await processRun(payrollRunId);
+      await processPayrollRun(payrollRunId);
     });
 
     return PayrollRunModel.findById(run.id);
@@ -128,7 +156,13 @@ export class PayrollService {
         channels: ['in-app', 'email'],
         read: false,
       });
-      await emailQueue.add('notify-payslip', { notificationId: notification.id });
+      try {
+        await emailQueue.add('notify-payslip', { notificationId: notification.id }, async ({ notificationId }) => {
+          await processPayslipNotification(notificationId);
+        });
+      } catch (error) {
+        logger.error(`Failed to enqueue payslip notification for payroll record ${record.id}: ${(error as Error).message}`);
+      }
     }
 
     return run;
@@ -142,18 +176,32 @@ export class PayrollService {
     });
   }
 
-  static async generatePayslip(recordId: string) {
-    const record = await PayrollRecordModel.findById(recordId).populate('employeeId', 'employeeId firstName lastName designation');
+  static async generatePayslip(recordId: string, requester?: JwtUserPayload) {
+    const record = await PayrollRecordModel.findById(recordId).populate('employeeId', 'employeeId userId firstName lastName designation');
     if (!record) {
       throw new AppError('Payroll record not found', 404);
     }
 
     const employee = record.employeeId as unknown as {
+      _id: { toString(): string };
+      userId: { toString(): string };
       employeeId: string;
       firstName: string;
       lastName: string;
       designation: string;
     };
+
+    if (requester && requester.role !== 'superAdmin' && requester.role !== 'admin') {
+      const requesterEmployee = await EmployeeModel.findOne({ userId: requester.userId, isDeleted: false }).select('_id');
+      if (!requesterEmployee) {
+        throw new AppError('Employee profile not found', 404);
+      }
+
+      if (requesterEmployee.id !== employee._id.toString()) {
+        throw new AppError('You do not have access to this payslip', 403);
+      }
+    }
+
     const salary = record.salary ?? {
       grossSalary: 0,
       tax: 0,

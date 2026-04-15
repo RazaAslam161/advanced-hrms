@@ -63,6 +63,7 @@ export interface JwtUserPayload {
   email: string;
   role: Role;
   permissions: string[];
+  tokenVersion: number;
   sessionId?: string;
 }
 

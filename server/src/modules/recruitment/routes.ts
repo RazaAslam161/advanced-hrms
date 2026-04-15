@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { authenticate } from '../../common/middleware/auth';
 import { authorize } from '../../common/middleware/rbac';
+import { uploadRateLimiter } from '../../common/middleware/rateLimiter';
 import { singleUpload } from '../../common/middleware/upload';
 import { validate } from '../../common/middleware/validate';
 import {
@@ -27,7 +28,7 @@ const publicRouter = Router();
 
 publicRouter.get('/careers', publicCareers);
 publicRouter.get('/careers/:slug', publicCareerDetail);
-publicRouter.post('/applications', singleUpload('resume'), validate({ body: applicationSchema }), submitApplication);
+publicRouter.post('/applications', uploadRateLimiter, singleUpload('resume'), validate({ body: applicationSchema }), submitApplication);
 
 router.use(authenticate);
 router.get('/jobs', authorize(['superAdmin', 'admin', 'recruiter'], ['recruitment.read']), listJobs);

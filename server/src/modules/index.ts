@@ -13,6 +13,7 @@ import { pulseRouter } from './pulse/routes';
 import { gigRouter } from './gig/routes';
 import { announcementRouter } from './announcement/routes';
 import { projectRouter } from './project/routes';
+import { assetsRouter } from './assets/routes';
 
 export const apiRouter = Router();
 
@@ -31,3 +32,4 @@ apiRouter.use('/pulse', pulseRouter);
 apiRouter.use('/gigs', gigRouter);
 apiRouter.use('/announcements', announcementRouter);
 apiRouter.use('/projects', projectRouter);
+apiRouter.use('/assets', assetsRouter);

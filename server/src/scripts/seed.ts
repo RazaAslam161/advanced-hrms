@@ -308,6 +308,8 @@ const createUserAndEmployee = async (
   return { user, employee };
 };
 
+type SeededPerson = Awaited<ReturnType<typeof createUserAndEmployee>>;
+
 const seed = async () => {
   await connectDatabase();
   await clearDatabase();
@@ -326,7 +328,7 @@ const seed = async () => {
     isDefault: true,
   });
 
-  const seededPeople: Array<{ user: Awaited<ReturnType<typeof UserModel.create>>; employee: Awaited<ReturnType<typeof EmployeeModel.create>> }> = [];
+  const seededPeople: SeededPerson[] = [];
 
   seededPeople.push(await createUserAndEmployee('superAdmin', createdDepartments[5], 0));
   for (let index = 0; index < 2; index += 1) {

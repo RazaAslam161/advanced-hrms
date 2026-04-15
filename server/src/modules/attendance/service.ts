@@ -139,6 +139,27 @@ export class AttendanceService {
   }
 
   static async dashboard(_requester?: JwtUserPayload) {
+    if (_requester?.role === 'employee') {
+      const employee = await EmployeeModel.findOne({ userId: _requester.userId, isDeleted: false }).select('_id employeeId firstName lastName');
+      if (!employee) {
+        throw new AppError('Employee profile not found', 404);
+      }
+
+      const today = startOfDay(new Date());
+      const records = await AttendanceRecordModel.find({ date: today, employeeId: employee._id }).lean();
+      const activeRecord = records.find((item) => item.checkIn && !item.checkOut);
+      return {
+        totalCheckedIn: activeRecord ? 1 : 0,
+        totalCheckedOut: records.some((item) => item.checkOut) ? 1 : 0,
+        live: records.map((item) => ({
+          employee: employee,
+          checkIn: item.checkIn,
+          checkOut: item.checkOut,
+          status: item.checkOut ? 'out' : item.checkIn ? 'in' : 'unknown',
+        })),
+      };
+    }
+
     const today = startOfDay(new Date());
     const records = await AttendanceRecordModel.find({ date: today }).populate('employeeId', 'employeeId firstName lastName').lean();
     const inOffice = records.filter((item) => item.checkIn && !item.checkOut);
@@ -203,14 +224,19 @@ export class AttendanceService {
     return shift;
   }
 
-  static async requestOvertime(employeeId: string, payload: { attendanceId: string; hours: number; reason: string }) {
-    const attendance = await AttendanceRecordModel.findOne({ _id: payload.attendanceId, employeeId });
+  static async requestOvertime(userId: string, payload: { attendanceId: string; hours: number; reason: string }) {
+    const employee = await EmployeeModel.findOne({ userId, isDeleted: false }).select('_id');
+    if (!employee) {
+      throw new AppError('Employee not found', 404);
+    }
+
+    const attendance = await AttendanceRecordModel.findOne({ _id: payload.attendanceId, employeeId: employee._id });
     if (!attendance) {
       throw new AppError('Attendance record not found', 404);
     }
 
     return OvertimeRequestModel.create({
-      employeeId,
+      employeeId: employee._id,
       attendanceId: payload.attendanceId,
       hours: payload.hours,
       reason: payload.reason,
