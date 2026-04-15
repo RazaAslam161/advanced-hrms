@@ -9,6 +9,11 @@ on:
 jobs:
   server-quality:
     runs-on: ubuntu-latest
+    services:
+      mailhog:
+        image: mailhog/mailhog:v1.0.1
+        ports:
+          - 1025:1025
     steps:
       - name: Checkout
         uses: actions/checkout@v4
