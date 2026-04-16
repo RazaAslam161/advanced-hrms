@@ -17,12 +17,24 @@ export const createApp = (): express.Express => {
   app.set('trust proxy', 1);
 
   app.use(helmet());
-  app.use(
-    cors({
-      origin: env.CLIENT_URL,
-      credentials: true,
-    }),
-  );
+ app.use(
+  cors({
+    origin: (origin, callback) => {
+      const allowedOrigins = [
+        env.CLIENT_URL,
+        'https://advanced-hrms-client.vercel.app',
+      ].filter(Boolean);
+
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error(`CORS blocked for origin: ${origin}`));
+    },
+    credentials: true,
+  }),
+);
   app.use(morgan('dev', { stream: { write: (message) => logger.http(message.trim()) } }));
   app.use(express.json({ limit: '5mb' }));
   app.use(express.urlencoded({ extended: true }));
