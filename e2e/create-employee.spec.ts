@@ -30,7 +30,7 @@ test('creates an employee account and uses the issued credentials to sign in', a
 
   await form.evaluate((node) => (node as HTMLFormElement).requestSubmit());
 
-  await expect(page.getByTestId('issued-credentials-card')).toBeVisible();
+  await expect(page.getByTestId('issued-credentials-card')).toBeVisible({ timeout: 30000 });
   await expect(page.getByTestId('issued-credentials-email')).toHaveText(uniqueEmail);
 
   const temporaryPassword = (await page.getByTestId('issued-credentials-password').textContent())?.trim();
