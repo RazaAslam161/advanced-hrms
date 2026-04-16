@@ -2,8 +2,12 @@ import axios from 'axios';
 import { apiBaseUrl } from './constants';
 import { useAuthStore } from '../store/authStore';
 
+import axios from 'axios';
+import { getApiBaseUrl } from './constants';
+import { useAuthStore } from '../store/authStore';
+
 export const api = axios.create({
-  baseURL: apiBaseUrl,
+  baseURL: getApiBaseUrl(),
   withCredentials: true,
 });
 
@@ -27,7 +31,7 @@ api.interceptors.response.use(
     if (error.response?.status === 401 && !error.config?._retry && !isAuthRequest) {
       error.config._retry = true;
       try {
-        const { data } = await axios.post(`${apiBaseUrl}/auth/refresh`, {}, { withCredentials: true });
+        const { data } = await axios.post(`${getApiBaseUrl()}/auth/refresh`, {}, { withCredentials: true });
         useAuthStore.getState().setSession(data.data.accessToken, data.data.user);
         error.config.headers.Authorization = `Bearer ${data.data.accessToken}`;
         return api.request(error.config);

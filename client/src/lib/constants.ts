@@ -124,4 +124,5 @@ export const canAccessPortalSlug = (user: User | null, slug: string) =>
 export const getPortalLabelFromPath = (user: User | null, pathname: string) =>
   getPortalNavItems(user).find((item) => item.path === pathname)?.label ?? 'Dashboard';
 
-export const apiBaseUrl = getClientEnv('VITE_API_URL', 'http://localhost:4001/api/v1');
+export const getApiBaseUrl = () =>
+  getClientEnv('VITE_API_URL', 'http://localhost:4001/api/v1');
