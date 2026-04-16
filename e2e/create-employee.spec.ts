@@ -14,6 +14,7 @@ test('creates an employee account and uses the issued credentials to sign in', a
   await expect(page).toHaveURL(/\/portal\/super-admin\/employees/);
 
   const form = page.getByTestId('employee-create-form');
+  await expect(form).toBeVisible();
 
   await form.getByPlaceholder('First name').fill('Qa');
   await form.getByPlaceholder('Last name').fill('Employee');
@@ -28,9 +29,18 @@ test('creates an employee account and uses the issued credentials to sign in', a
 
   await form.getByPlaceholder('Basic salary').fill('150000');
 
-  await form.evaluate((node) => (node as HTMLFormElement).requestSubmit());
+  const credentialsCard = page.getByTestId('issued-credentials-card');
+  const errorText = page.locator('p.text-sm.text-rose-300').last();
 
-  await expect(page.getByTestId('issued-credentials-card')).toBeVisible();
+  await form.getByTestId('employee-create-submit').click();
+
+  await Promise.race([
+    credentialsCard.waitFor({ state: 'visible', timeout: 15000 }),
+    errorText.waitFor({ state: 'visible', timeout: 15000 }).then(async () => {
+      throw new Error(`Employee creation failed: ${(await errorText.textContent())?.trim()}`);
+    }),
+  ]);
+
   await expect(page.getByTestId('issued-credentials-email')).toHaveText(uniqueEmail);
 
   const temporaryPassword = (await page.getByTestId('issued-credentials-password').textContent())?.trim();
