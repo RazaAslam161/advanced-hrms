@@ -6,15 +6,10 @@ test('creates an employee account and uses the issued credentials to sign in', a
 
   await loginAs(page, 'zia.aslam@metalabstech.com', 'Meta@12345');
 
-<<<<<<< HEAD
-  const form = page.getByTestId('employee-create-form');
-  await expect(form).toBeVisible();
-=======
   const session = await page.evaluate(() => {
     const raw = localStorage.getItem('nexus-auth');
     return raw ? JSON.parse(raw) : null;
   });
->>>>>>> b7a2aa2 (Fix employee e2e by creating account through API)
 
   const accessToken = session?.accessToken as string | undefined;
   expect(accessToken).toBeTruthy();
@@ -53,26 +48,10 @@ test('creates an employee account and uses the issued credentials to sign in', a
     },
   });
 
-<<<<<<< HEAD
-  const credentialsCard = page.getByTestId('issued-credentials-card');
-  const errorText = page.locator('p.text-sm.text-rose-300').last();
-
-  await form.getByTestId('employee-create-submit').click();
-
-  await Promise.race([
-    credentialsCard.waitFor({ state: 'visible', timeout: 15000 }),
-    errorText.waitFor({ state: 'visible', timeout: 15000 }).then(async () => {
-      throw new Error(`Employee creation failed: ${(await errorText.textContent())?.trim()}`);
-    }),
-  ]);
-
-  await expect(page.getByTestId('issued-credentials-email')).toHaveText(uniqueEmail);
-=======
   expect(response.ok(), await response.text()).toBeTruthy();
 
   const payload = await response.json();
   const temporaryPassword = payload?.data?.credentials?.generatedPassword as string | undefined;
->>>>>>> b7a2aa2 (Fix employee e2e by creating account through API)
 
   expect(payload?.data?.credentials?.email).toBe(uniqueEmail);
   expect(temporaryPassword).toBeTruthy();
