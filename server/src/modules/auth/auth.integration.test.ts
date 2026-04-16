@@ -3,6 +3,7 @@ import type { IntegrationHarness } from '../../test/integration/harness';
 import { bearerHeader, createAccessToken, loginAs } from '../../test/integration/auth';
 import { createDepartment, createUserWithEmployee } from '../../test/integration/factories';
 import { createIntegrationHarness } from '../../test/integration/harness';
+import * as auditUtils from '../../common/utils/audit';
 
 describe('auth integration', () => {
   let ctx: IntegrationHarness;
@@ -170,5 +171,26 @@ describe('auth integration', () => {
 
     expect(response.status).toBe(403);
     expect(response.body.message).toBe('Account is inactive');
+  });
+
+  it('still logs in when audit logging fails', async () => {
+    const { password, user } = await createUserWithEmployee(ctx, {
+      role: 'employee',
+      email: 'audit.failure@metalabstech.test',
+      firstName: 'Audit',
+      lastName: 'Safe',
+    });
+
+    const auditSpy = jest.spyOn(auditUtils, 'createAuditLog').mockRejectedValueOnce(new Error('audit unavailable'));
+
+    const response = await request(ctx.app).post('/api/v1/auth/login').send({
+      email: user.email,
+      password,
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.user.email).toBe(user.email);
+
+    auditSpy.mockRestore();
   });
 });

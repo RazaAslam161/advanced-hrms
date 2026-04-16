@@ -29,18 +29,22 @@ const createKeyPair = () => {
 const loadFallbackKeyPair = (): { privateKey: string; publicKey: string } => {
   const { keyDir, privateKeyPath, publicKeyPath } = fallbackKeyPaths();
 
-  if (fs.existsSync(privateKeyPath) && fs.existsSync(publicKeyPath)) {
-    return {
-      privateKey: fs.readFileSync(privateKeyPath, 'utf8'),
-      publicKey: fs.readFileSync(publicKeyPath, 'utf8'),
-    };
-  }
+  try {
+    if (fs.existsSync(privateKeyPath) && fs.existsSync(publicKeyPath)) {
+      return {
+        privateKey: fs.readFileSync(privateKeyPath, 'utf8'),
+        publicKey: fs.readFileSync(publicKeyPath, 'utf8'),
+      };
+    }
 
-  const keyPair = createKeyPair();
-  fs.mkdirSync(keyDir, { recursive: true });
-  fs.writeFileSync(privateKeyPath, keyPair.privateKey, { encoding: 'utf8', mode: 0o600 });
-  fs.writeFileSync(publicKeyPath, keyPair.publicKey, { encoding: 'utf8' });
-  return keyPair;
+    const keyPair = createKeyPair();
+    fs.mkdirSync(keyDir, { recursive: true });
+    fs.writeFileSync(privateKeyPath, keyPair.privateKey, { encoding: 'utf8', mode: 0o600 });
+    fs.writeFileSync(publicKeyPath, keyPair.publicKey, { encoding: 'utf8' });
+    return keyPair;
+  } catch {
+    return createKeyPair();
+  }
 };
 
 const getKeyPair = (): { privateKey: string; publicKey: string } => {

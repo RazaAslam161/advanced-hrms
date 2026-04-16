@@ -102,6 +102,16 @@ const hashToken = (token: string): string => crypto.createHash('sha256').update(
 const revokeUserSessions = async (userId: string) => {
   await AuthSessionModel.updateMany({ userId, revokedAt: { $exists: false } }, { revokedAt: new Date() });
 };
+const isDuplicateKeyError = (error: unknown) =>
+  error instanceof Error && 'code' in error && Number((error as { code?: number }).code) === 11000;
+
+const safeCreateAuditLog = async (input: Parameters<typeof createAuditLog>[0]) => {
+  try {
+    await createAuditLog(input);
+  } catch {
+    return;
+  }
+};
 export const generateTemporaryPassword = (): string => {
   const segment = crypto.randomBytes(4).toString('hex');
   return `Meta${segment.slice(0, 2).toUpperCase()}!${segment.slice(2)}9`;
@@ -153,32 +163,48 @@ const ensureEmployeeProfile = async (
 
   const department = typeof input?.department === 'string' && input.department.trim() ? input.department : undefined;
 
-  await EmployeeModel.create({
-    userId,
-    employeeId: await generateEmployeeId(),
-    firstName: user.firstName,
-    lastName: user.lastName,
-    displayName: `${user.firstName} ${user.lastName}`,
-    email: user.email,
-    department,
-    designation: input?.designation ?? defaultDesignationByRole[user.role],
-    employmentType: 'full-time',
-    joiningDate: new Date(),
-    salary: {
-      basic: 0,
-      houseRent: 0,
-      medical: 0,
-      transport: 0,
-      currency: 'PKR',
-      bonus: 0,
-    },
-    emergencyContacts: [],
-    skills: [],
-    timezone: 'Asia/Karachi',
-    workLocation: 'onsite',
-    country: 'Pakistan',
-    status: 'active',
-  });
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      await EmployeeModel.create({
+        userId,
+        employeeId: await generateEmployeeId(),
+        firstName: user.firstName,
+        lastName: user.lastName,
+        displayName: `${user.firstName} ${user.lastName}`,
+        email: user.email,
+        department,
+        designation: input?.designation ?? defaultDesignationByRole[user.role],
+        employmentType: 'full-time',
+        joiningDate: new Date(),
+        salary: {
+          basic: 0,
+          houseRent: 0,
+          medical: 0,
+          transport: 0,
+          currency: 'PKR',
+          bonus: 0,
+        },
+        emergencyContacts: [],
+        skills: [],
+        timezone: 'Asia/Karachi',
+        workLocation: 'onsite',
+        country: 'Pakistan',
+        status: 'active',
+      });
+      return;
+    } catch (error) {
+      if (!isDuplicateKeyError(error)) {
+        throw error;
+      }
+
+      const recoveredEmployee = await EmployeeModel.findOne({ userId });
+      if (recoveredEmployee) {
+        return;
+      }
+    }
+  }
+
+  throw new AppError('Unable to prepare employee profile for this account', 500);
 };
 
 const serializeUser = (user: {
@@ -272,7 +298,7 @@ export class AuthService {
     });
 
     await ensureEmployeeProfile(user, { department: input.department, designation: input.designation });
-    await createAuditLog({
+    await safeCreateAuditLog({
       actorId: user.id,
       module: 'auth',
       action: 'register',
@@ -337,7 +363,7 @@ export class AuthService {
 
     user.lastLogin = new Date();
     await user.save();
-    await createAuditLog({
+    await safeCreateAuditLog({
       actorId: user.id,
       module: 'auth',
       action: 'login',
@@ -485,7 +511,7 @@ export class AuthService {
     user.tokenVersion += 1;
     await user.save();
     await revokeUserSessions(user.id);
-    await createAuditLog({
+    await safeCreateAuditLog({
       actorId: userId,
       module: 'auth',
       action: 'password.change',
@@ -525,7 +551,7 @@ export class AuthService {
     user.tokenVersion += 1;
     await user.save();
     await revokeUserSessions(user.id);
-    await createAuditLog({
+    await safeCreateAuditLog({
       actorId: actorUserId,
       module: 'auth',
       action: 'password.reset',
@@ -632,7 +658,7 @@ export class AuthService {
 
     await Promise.all([currentUser.save(), targetUser.save()]);
     await Promise.all([revokeUserSessions(currentUser.id), revokeUserSessions(targetUser.id)]);
-    await createAuditLog({
+    await safeCreateAuditLog({
       actorId: currentUserId,
       module: 'auth',
       action: 'super-admin.transfer',
@@ -663,7 +689,7 @@ export class AuthService {
 
   static async logoutAll(userId: string) {
     await AuthSessionModel.updateMany({ userId, revokedAt: { $exists: false } }, { revokedAt: new Date() });
-    await createAuditLog({
+    await safeCreateAuditLog({
       actorId: userId,
       module: 'auth',
       action: 'logout-all',
