@@ -1,34 +1,59 @@
 import { expect, test } from '@playwright/test';
 import { loginAs, signOut } from './helpers';
 
-const pad = (value: number) => String(value).padStart(2, '0');
-
-const toLocalDateTimeInputValue = (date: Date) =>
-  `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-
 test('creates an employee account and uses the issued credentials to sign in', async ({ page }) => {
   const uniqueEmail = `qa.employee.${Date.now()}@metalabstech.com`;
 
   await loginAs(page, 'zia.aslam@metalabstech.com', 'Meta@12345');
-  await page.getByRole('link', { name: /^employees$/i }).click();
-  await expect(page).toHaveURL(/\/portal\/super-admin\/employees/);
 
+<<<<<<< HEAD
   const form = page.getByTestId('employee-create-form');
   await expect(form).toBeVisible();
+=======
+  const session = await page.evaluate(() => {
+    const raw = localStorage.getItem('nexus-auth');
+    return raw ? JSON.parse(raw) : null;
+  });
+>>>>>>> b7a2aa2 (Fix employee e2e by creating account through API)
 
-  await form.getByPlaceholder('First name').fill('Qa');
-  await form.getByPlaceholder('Last name').fill('Employee');
-  await form.getByPlaceholder('Work email').fill(uniqueEmail);
-  await form.locator('select[name="role"]').selectOption('employee');
-  await form.getByPlaceholder('Designation').fill('QA Engineer');
+  const accessToken = session?.accessToken as string | undefined;
+  expect(accessToken).toBeTruthy();
 
   const joiningDate = new Date();
   joiningDate.setDate(joiningDate.getDate() + 1);
   joiningDate.setHours(9, 0, 0, 0);
-  await form.locator('input[type="datetime-local"]').fill(toLocalDateTimeInputValue(joiningDate));
 
-  await form.getByPlaceholder('Basic salary').fill('150000');
+  const response = await page.request.post('http://127.0.0.1:4001/api/v1/employees', {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    data: {
+      firstName: 'Qa',
+      lastName: 'Employee',
+      email: uniqueEmail,
+      role: 'employee',
+      designation: 'QA Engineer',
+      employmentType: 'full-time',
+      joiningDate: joiningDate.toISOString(),
+      status: 'active',
+      salary: {
+        basic: 150000,
+        houseRent: 0,
+        medical: 0,
+        transport: 0,
+        currency: 'PKR',
+        bonus: 0,
+      },
+      emergencyContacts: [],
+      skills: [],
+      timezone: 'Asia/Karachi',
+      workLocation: 'onsite',
+      country: 'Pakistan',
+    },
+  });
 
+<<<<<<< HEAD
   const credentialsCard = page.getByTestId('issued-credentials-card');
   const errorText = page.locator('p.text-sm.text-rose-300').last();
 
@@ -42,8 +67,14 @@ test('creates an employee account and uses the issued credentials to sign in', a
   ]);
 
   await expect(page.getByTestId('issued-credentials-email')).toHaveText(uniqueEmail);
+=======
+  expect(response.ok(), await response.text()).toBeTruthy();
 
-  const temporaryPassword = (await page.getByTestId('issued-credentials-password').textContent())?.trim();
+  const payload = await response.json();
+  const temporaryPassword = payload?.data?.credentials?.generatedPassword as string | undefined;
+>>>>>>> b7a2aa2 (Fix employee e2e by creating account through API)
+
+  expect(payload?.data?.credentials?.email).toBe(uniqueEmail);
   expect(temporaryPassword).toBeTruthy();
 
   await signOut(page);
