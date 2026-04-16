@@ -1,4 +1,4 @@
-import { apiBaseUrl } from './constants';
+import { getApiBaseUrl } from './constants';
 
 export const resolveAssetUrl = (value?: string | null) => {
   if (!value) {
@@ -14,7 +14,7 @@ export const resolveAssetUrl = (value?: string | null) => {
   }
 
   try {
-    const apiUrl = new URL(apiBaseUrl);
+    const apiUrl = new URL(getApiBaseUrl());
     return new URL(value, apiUrl.origin).toString();
   } catch {
     return value;
