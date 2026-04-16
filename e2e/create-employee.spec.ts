@@ -30,6 +30,8 @@ test('creates an employee account and uses the issued credentials to sign in', a
 
   await form.evaluate((node) => (node as HTMLFormElement).requestSubmit());
 
+  await page.waitForResponse((response) => response.url().includes('/employees') && response.request().method() === 'POST' && response.status() === 201);
+
   await expect(page.getByTestId('issued-credentials-card')).toBeVisible();
   await expect(page.getByTestId('issued-credentials-email')).toHaveText(uniqueEmail);
 
