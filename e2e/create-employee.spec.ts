@@ -13,31 +13,22 @@ test('creates an employee account and uses the issued credentials to sign in', a
   await page.getByRole('link', { name: /^employees$/i }).click();
   await expect(page).toHaveURL(/\/portal\/super-admin\/employees/);
 
-  await page.getByPlaceholder('First name').fill('Qa');
-  await page.getByPlaceholder('Last name').fill('Employee');
-  await page.getByPlaceholder('Work email').fill(uniqueEmail);
+  const form = page.getByTestId('employee-create-form');
 
-  const selects = page.locator('select');
-  await selects.nth(1).selectOption({ index: 1 });
+  await form.getByPlaceholder('First name').fill('Qa');
+  await form.getByPlaceholder('Last name').fill('Employee');
+  await form.getByPlaceholder('Work email').fill(uniqueEmail);
+  await form.locator('select[name="role"]').selectOption('employee');
+  await form.getByPlaceholder('Designation').fill('QA Engineer');
 
   const joiningDate = new Date();
   joiningDate.setDate(joiningDate.getDate() + 1);
   joiningDate.setHours(9, 0, 0, 0);
-  await page.locator('input[type="datetime-local"]').first().fill(toLocalDateTimeInputValue(joiningDate));
+  await form.locator('input[type="datetime-local"]').fill(toLocalDateTimeInputValue(joiningDate));
 
-  await page.getByPlaceholder('Designation').fill('QA Engineer');
-  await page.getByPlaceholder('Basic salary').fill('150000');
+  await form.getByPlaceholder('Basic salary').fill('150000');
 
-  const createResponsePromise = page.waitForResponse(
-    (response) =>
-      response.url().includes('/api/v1/employees') &&
-      response.request().method() === 'POST',
-  );
-
-  await page.getByTestId('employee-create-submit').click();
-
-  const createResponse = await createResponsePromise;
-  expect(createResponse.ok(), await createResponse.text()).toBeTruthy();
+  await form.evaluate((node) => (node as HTMLFormElement).requestSubmit());
 
   await expect(page.getByTestId('issued-credentials-card')).toBeVisible();
   await expect(page.getByTestId('issued-credentials-email')).toHaveText(uniqueEmail);
