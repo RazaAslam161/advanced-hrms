@@ -12,6 +12,7 @@ module.exports = {
   setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
   moduleNameMapper: {
     '\\.(css|scss)$': 'identity-obj-proxy',
+    '^\\.{1,2}/(.*\\/)?env(\\.ts)?$': '<rootDir>/src/test/__mocks__/env.ts',
   },
   collectCoverageFrom: ['src/**/*.{ts,tsx}', '!src/main.tsx', '!src/**/*.test.{ts,tsx}', '!src/test/**'],
   coverageDirectory: '<rootDir>/coverage',
