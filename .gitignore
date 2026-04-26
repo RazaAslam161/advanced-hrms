@@ -15,3 +15,5 @@ server/uploads-e2e
 server/.runtime
 client/dist
 *.log
+deliverables/
+*.zip
