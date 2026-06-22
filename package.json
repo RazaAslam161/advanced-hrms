@@ -1,0 +1,25 @@
+{
+  "name": "nexus-hrms",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "dev": "npm --workspace backend run dev",
+    "build": "npm run build --workspaces",
+    "typecheck": "npm run typecheck --workspaces",
+    "test": "npm run test --workspaces",
+    "seed": "npm --workspace backend run seed",
+    "test:server:coverage": "npm --workspace backend run test:coverage",
+    "test:client:coverage": "npm --workspace frontend run test:coverage",
+    "e2e:server": "npx cross-env NODE_ENV=development CLIENT_URL=http://127.0.0.1:4173 MONGODB_URI=mongodb://127.0.0.1:27017/nexus-hrms-e2e QUEUE_DRIVER=inline FILE_STORAGE_DRIVER=local UPLOAD_DIR=./backend/uploads-e2e npm --workspace backend run seed && npx cross-env NODE_ENV=development CLIENT_URL=http://127.0.0.1:4173 MONGODB_URI=mongodb://127.0.0.1:27017/nexus-hrms-e2e QUEUE_DRIVER=inline FILE_STORAGE_DRIVER=local UPLOAD_DIR=./backend/uploads-e2e npm --workspace backend run dev:api",
+    "e2e:client": "npm --workspace frontend run build && npm --workspace frontend run preview -- --host 127.0.0.1 --port 4173",
+    "test:e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.54.2",
+    "cross-env": "^10.1.0"
+  }
+}
