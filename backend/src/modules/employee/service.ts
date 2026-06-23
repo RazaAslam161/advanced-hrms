@@ -472,7 +472,7 @@ export class EmployeeService {
     return EmployeeActivityModel.find({ employeeId: employee._id }).sort({ occurredAt: -1 }).limit(20).lean();
   }
 
-  static async bulkImport(file: Express.Multer.File, actorId?: string) {
+  static async bulkImport(file: Express.Multer.File, actor?: { userId: string; role: Role }) {
     const workbook = await loadWorkbookFromBuffer(file.buffer);
     const sheet = workbook.worksheets[0];
     if (!sheet) {
@@ -514,7 +514,7 @@ export class EmployeeService {
       }
 
       try {
-        await this.create(payload, actorId);
+        await this.create(payload, actor);
         imported += 1;
       } catch (error) {
         errors.push({ row: row.number, message: (error as Error).message });

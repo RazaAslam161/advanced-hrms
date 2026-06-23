@@ -75,6 +75,6 @@ export const getEmployeeTimeline = asyncHandler(async (req: Request, res: Respon
 });
 
 export const bulkImportEmployees = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-  const result = await EmployeeService.bulkImport(req.file!, req.user?.userId);
+  const result = await EmployeeService.bulkImport(req.file!, req.user ? { userId: req.user.userId, role: req.user.role } : undefined);
   res.json(sendSuccess('Employee import processed successfully', result));
 });
