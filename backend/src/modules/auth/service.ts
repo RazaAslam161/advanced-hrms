@@ -11,6 +11,7 @@ import { AuthSessionModel, UserModel } from './model';
 import { logger } from '../../common/utils/logger';
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../../common/utils/jwt';
 import type { Role } from '../../common/constants/roles';
+import { env } from '../../config/env';
 import { EmployeeModel } from '../employee/model';
 import { EmployeeService } from '../employee/service';
 import { AuditLogModel } from '../analytics/model';
@@ -108,19 +109,31 @@ export const syncRolePermissions = async (): Promise<void> => {
   await UserModel.updateMany({ role: 'admin' }, { $addToSet: { permissions: 'performance.read' } });
 };
 
-// Boot-time safeguard: keep exactly ONE working admin login so nobody can get locked out.
-// Removes the legacy super-admin account, then ensures a single active admin whose
-// password is reset to a known value on every boot (so the login can never silently fail).
+// Boot-time safeguard: keep a single bootstrap admin available without overwriting
+// credentials that may already have been rotated by an operator.
 export const ADMIN_EMAIL = 'admin@metalabstech.com';
 export const ADMIN_PASSWORD = 'Meta@12345';
+
+const getBootstrapAdminPassword = (): string => {
+  if (env.BOOTSTRAP_ADMIN_PASSWORD) {
+    return env.BOOTSTRAP_ADMIN_PASSWORD;
+  }
+
+  if (env.NODE_ENV === 'production') {
+    throw new AppError('BOOTSTRAP_ADMIN_PASSWORD must be set before creating the bootstrap admin account', 500);
+  }
+
+  return ADMIN_PASSWORD;
+};
 
 export const ensureAdminAccount = async (): Promise<void> => {
   let user = await UserModel.findOne({ email: ADMIN_EMAIL });
   const existed = Boolean(user);
   if (!user) {
+    const password = getBootstrapAdminPassword();
     user = await UserModel.create({
       email: ADMIN_EMAIL,
-      password: await hashPassword(ADMIN_PASSWORD),
+      password: await hashPassword(password),
       role: 'superAdmin',
       permissions: resolveRolePermissions('superAdmin'),
       isActive: true,
@@ -128,17 +141,32 @@ export const ensureAdminAccount = async (): Promise<void> => {
       lastName: 'Admin',
     });
   } else {
-    user.password = await hashPassword(ADMIN_PASSWORD);
-    user.role = 'superAdmin';
-    user.permissions = resolveRolePermissions('superAdmin');
-    user.isActive = true;
-    user.tokenVersion += 1;
-    await user.save();
-    await AuthSessionModel.updateMany({ userId: user._id, revokedAt: { $exists: false } }, { revokedAt: new Date() });
+    let accessChanged = false;
+    const requiredPermissions = resolveRolePermissions('superAdmin');
+    if (user.role !== 'superAdmin') {
+      user.role = 'superAdmin';
+      accessChanged = true;
+    }
+    if (
+      user.permissions.length !== requiredPermissions.length ||
+      requiredPermissions.some((permission) => !user.permissions.includes(permission))
+    ) {
+      user.permissions = requiredPermissions;
+      accessChanged = true;
+    }
+    if (!user.isActive) {
+      user.isActive = true;
+      accessChanged = true;
+    }
+    if (accessChanged) {
+      user.tokenVersion += 1;
+      await user.save();
+      await AuthSessionModel.updateMany({ userId: user._id, revokedAt: { $exists: false } }, { revokedAt: new Date() });
+    }
   }
 
   logger.info(
-    `Admin account ready: ${ADMIN_EMAIL} (${existed ? 'password reset' : 'created'}), active=${user.isActive}, role=${user.role}`,
+    `Admin account ready: ${ADMIN_EMAIL} (${existed ? 'verified' : 'created'}), active=${user.isActive}, role=${user.role}`,
   );
 
   const employee = await EmployeeModel.findOne({ userId: user._id });
@@ -180,7 +208,53 @@ export const generateTemporaryPassword = (): string => {
   return `Meta${segment.slice(0, 2).toUpperCase()}!${segment.slice(2)}9`;
 };
 
-export const resolveRolePermissions = (role: Role, permissions?: string[]) => (permissions?.length ? permissions : roleDefaults[role]);
+const privilegedRoles = new Set<Role>(['superAdmin', 'admin']);
+
+export const validatePermissionList = (permissions?: string[]): void => {
+  if (!permissions) {
+    return;
+  }
+
+  const permissionSet = new Set(allPermissions);
+  const invalidPermission = permissions.find((permission) => !permissionSet.has(permission));
+  if (invalidPermission) {
+    throw new AppError(`Invalid permission: ${invalidPermission}`, 422);
+  }
+};
+
+export const assertCanAssignUserAccess = (input: {
+  actorUserId?: string;
+  actorRole?: Role;
+  targetUserId?: string;
+  targetRole?: Role;
+  role?: Role;
+  permissions?: string[];
+  privilegedMessage?: string;
+}): void => {
+  validatePermissionList(input.permissions);
+
+  if (!input.actorRole) {
+    return;
+  }
+
+  const touchesPrivilegedRole =
+    (input.role ? privilegedRoles.has(input.role) : false) || (input.targetRole ? privilegedRoles.has(input.targetRole) : false);
+
+  if (input.actorRole === 'admin' && touchesPrivilegedRole) {
+    throw new AppError(input.privilegedMessage ?? 'HR Admin cannot manage privileged accounts', 403);
+  }
+
+  if ((input.role || input.permissions) && input.actorUserId && input.targetUserId && input.actorUserId === input.targetUserId) {
+    throw new AppError('You cannot change your own permissions', 400);
+  }
+
+  if (input.permissions && input.actorRole !== 'superAdmin') {
+    throw new AppError('Only the Super Admin can change permissions', 403);
+  }
+};
+
+export const resolveRolePermissions = (role: Role, permissions?: string[]) =>
+  permissions?.length ? Array.from(new Set(permissions)) : roleDefaults[role];
 
 const isJwtVerificationError = (error: unknown) =>
   error instanceof Error && ['JsonWebTokenError', 'TokenExpiredError', 'NotBeforeError'].includes(error.name);
@@ -365,7 +439,17 @@ export class AuthService {
     lastName: string;
     department?: string;
     designation?: string;
+    actorUserId?: string;
+    actorRole?: Role;
   }) {
+    assertCanAssignUserAccess({
+      actorUserId: input.actorUserId,
+      actorRole: input.actorRole,
+      role: input.role,
+      permissions: input.permissions,
+      privilegedMessage: 'HR Admin cannot create privileged accounts',
+    });
+
     const existing = await UserModel.findOne({ email: input.email.toLowerCase() });
     if (existing) {
       throw new AppError('A user with this email already exists', 409);
@@ -671,25 +755,13 @@ export class AuthService {
       throw new AppError('User not found', 404);
     }
 
-    if (actorRole === 'admin' && ['admin', 'superAdmin'].includes(user.role)) {
-      throw new AppError('HR Admin cannot manage privileged accounts', 403);
-    }
-
-    if (input.permissions) {
-      if (actorRole !== 'superAdmin') {
-        throw new AppError('Only the Super Admin can change permissions', 403);
-      }
-
-      if (actorUserId === user.id) {
-        throw new AppError('You cannot change your own permissions', 400);
-      }
-
-      const permissionSet = new Set(allPermissions);
-      const invalidPermission = input.permissions.find((permission) => !permissionSet.has(permission));
-      if (invalidPermission) {
-        throw new AppError(`Invalid permission: ${invalidPermission}`, 422);
-      }
-    }
+    assertCanAssignUserAccess({
+      actorUserId,
+      actorRole,
+      targetUserId: user.id,
+      targetRole: user.role,
+      permissions: input.permissions,
+    });
 
     let revokeSessions = false;
 

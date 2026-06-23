@@ -19,6 +19,7 @@ const envSchema = z.object({
   JWT_PRIVATE_KEY: z.string().optional(),
   JWT_PUBLIC_KEY: z.string().optional(),
   COOKIE_SECRET: z.string().default('nexus-cookie-secret'),
+  BOOTSTRAP_ADMIN_PASSWORD: z.string().min(10).optional(),
   SMTP_HOST: z.string().default('localhost'),
   SMTP_PORT: z.coerce.number().default(1025),
   SMTP_USER: z.string().default(''),

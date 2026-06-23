@@ -12,8 +12,12 @@ const refreshCookieOptions: CookieOptions = {
   maxAge: 7 * 24 * 60 * 60 * 1000,
 };
 
-export const register = asyncHandler(async (req: Request, res: Response) => {
-  const result = await AuthService.register(req.body);
+export const register = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const result = await AuthService.register({
+    ...req.body,
+    actorUserId: req.user!.userId,
+    actorRole: req.user!.role,
+  });
   res.status(201).json(sendSuccess('User registered successfully', result));
 });
 

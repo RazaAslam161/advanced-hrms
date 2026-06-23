@@ -35,12 +35,12 @@ export const getEmployee = asyncHandler(async (req: Request, res: Response) => {
 });
 
 export const createEmployee = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-  const employee = await EmployeeService.create(req.body, req.user?.userId);
+  const employee = await EmployeeService.create(req.body, req.user ? { userId: req.user.userId, role: req.user.role } : undefined);
   res.status(201).json(sendSuccess('Employee created successfully', employee));
 });
 
 export const updateEmployee = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-  const employee = await EmployeeService.update(String(req.params.id), req.body, req.user?.userId);
+  const employee = await EmployeeService.update(String(req.params.id), req.body, req.user ? { userId: req.user.userId, role: req.user.role } : undefined);
   res.json(sendSuccess('Employee updated successfully', employee));
 });
 
@@ -75,6 +75,6 @@ export const getEmployeeTimeline = asyncHandler(async (req: Request, res: Respon
 });
 
 export const bulkImportEmployees = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-  const result = await EmployeeService.bulkImport(req.file!, req.user?.userId);
+  const result = await EmployeeService.bulkImport(req.file!, req.user ? { userId: req.user.userId, role: req.user.role } : undefined);
   res.json(sendSuccess('Employee import processed successfully', result));
 });

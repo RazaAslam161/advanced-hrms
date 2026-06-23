@@ -8,7 +8,7 @@ import { escapeRegex, paginatedFetch } from '../../common/utils/query';
 import { persistBuffer, persistUpload, persistAvatarDataUrl } from '../../common/utils/storage';
 import { createAuditLog } from '../../common/utils/audit';
 import { createWorkbookBuffer, loadWorkbookFromBuffer } from '../../common/utils/excel';
-import { generateTemporaryPassword, resolveRolePermissions } from '../auth/service';
+import { assertCanAssignUserAccess, generateTemporaryPassword, resolveRolePermissions } from '../auth/service';
 import { EmployeeActivityModel, EmployeeModel } from './model';
 import type { Role } from '../../common/constants/roles';
 
@@ -236,13 +236,20 @@ export class EmployeeService {
     return employee;
   }
 
-  static async create(payload: Record<string, unknown>, actorId?: string) {
+  static async create(payload: Record<string, unknown>, actor?: { userId: string; role: Role }) {
     const existingUser = await UserModel.findOne({ email: String(payload.email).toLowerCase() });
     if (existingUser) {
       throw new AppError('A user with this email already exists', 409);
     }
 
     const role = (payload.role as Role | undefined) ?? 'employee';
+    assertCanAssignUserAccess({
+      actorUserId: actor?.userId,
+      actorRole: actor?.role,
+      role,
+      permissions: payload.permissions as string[] | undefined,
+      privilegedMessage: 'HR Admin cannot create privileged accounts',
+    });
     const permissions = resolveRolePermissions(role, payload.permissions as string[] | undefined);
     const generatedPassword = !payload.password ? generateTemporaryPassword() : undefined;
     const password = String(payload.password ?? generatedPassword);
@@ -272,8 +279,8 @@ export class EmployeeService {
       probationEndDate: payload.probationEndDate ? new Date(String(payload.probationEndDate)) : undefined,
     });
 
-    await logActivity(employee.id, 'employee.created', 'Employee profile created', actorId);
-    await createAuditLog({ actorId, module: 'employee', action: 'create', entityType: 'Employee', entityId: employee.id });
+    await logActivity(employee.id, 'employee.created', 'Employee profile created', actor?.userId);
+    await createAuditLog({ actorId: actor?.userId, module: 'employee', action: 'create', entityType: 'Employee', entityId: employee.id });
     return {
       employee,
       credentials: {
@@ -285,11 +292,33 @@ export class EmployeeService {
     };
   }
 
-  static async update(id: string, payload: Record<string, unknown>, actorId?: string) {
+  static async update(id: string, payload: Record<string, unknown>, actor?: { userId: string; role: Role }) {
     const department =
       typeof payload.department === 'string' ? (payload.department.trim() ? payload.department : undefined) : payload.department;
     const reportingTo =
       typeof payload.reportingTo === 'string' ? (payload.reportingTo.trim() ? payload.reportingTo : undefined) : payload.reportingTo;
+
+    const existingEmployee = await EmployeeModel.findOne({ _id: id, isDeleted: false });
+    if (!existingEmployee) {
+      throw new AppError('Employee not found', 404);
+    }
+
+    const accessPayloadPresent = Boolean(payload.role || payload.permissions || payload.status);
+    if (accessPayloadPresent) {
+      const linkedUser = await UserModel.findById(existingEmployee.userId);
+      if (!linkedUser) {
+        throw new AppError('Linked user account not found', 404);
+      }
+
+      assertCanAssignUserAccess({
+        actorUserId: actor?.userId,
+        actorRole: actor?.role,
+        targetUserId: linkedUser.id,
+        targetRole: linkedUser.role,
+        role: payload.role as Role | undefined,
+        permissions: payload.permissions as string[] | undefined,
+      });
+    }
 
     const employee = await EmployeeModel.findOneAndUpdate(
       { _id: id, isDeleted: false },
@@ -301,10 +330,6 @@ export class EmployeeService {
       },
       { new: true },
     );
-
-    if (!employee) {
-      throw new AppError('Employee not found', 404);
-    }
 
     const userUpdates: Record<string, unknown> = {};
     if (payload.email) {
@@ -331,8 +356,8 @@ export class EmployeeService {
       await UserModel.updateOne({ _id: employee.userId }, userUpdates);
     }
 
-    await logActivity(id, 'employee.updated', 'Employee profile updated', actorId);
-    await createAuditLog({ actorId, module: 'employee', action: 'update', entityType: 'Employee', entityId: employee.id });
+    await logActivity(id, 'employee.updated', 'Employee profile updated', actor?.userId);
+    await createAuditLog({ actorId: actor?.userId, module: 'employee', action: 'update', entityType: 'Employee', entityId: employee.id });
     return employee;
   }
 
@@ -447,7 +472,7 @@ export class EmployeeService {
     return EmployeeActivityModel.find({ employeeId: employee._id }).sort({ occurredAt: -1 }).limit(20).lean();
   }
 
-  static async bulkImport(file: Express.Multer.File, actorId?: string) {
+  static async bulkImport(file: Express.Multer.File, actor?: { userId: string; role: Role }) {
     const workbook = await loadWorkbookFromBuffer(file.buffer);
     const sheet = workbook.worksheets[0];
     if (!sheet) {
@@ -489,7 +514,7 @@ export class EmployeeService {
       }
 
       try {
-        await this.create(payload, actorId);
+        await this.create(payload, actor);
         imported += 1;
       } catch (error) {
         errors.push({ row: row.number, message: (error as Error).message });
