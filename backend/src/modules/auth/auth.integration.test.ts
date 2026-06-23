@@ -127,6 +127,50 @@ describe('auth integration', () => {
     expect(employeeResponse.body.message).toBe('You do not have access to this resource');
   });
 
+  it('prevents HR admins from creating privileged or custom-permission accounts', async () => {
+    const department = await createDepartment(ctx, { name: 'People Ops', code: 'POP' });
+    const { user: admin } = await createUserWithEmployee(ctx, {
+      role: 'admin',
+      email: 'hr.escalation@metalabstech.test',
+      department: department.id,
+    });
+
+    const basePayload = {
+      email: 'privileged.create@metalabstech.test',
+      password: 'Meta@12345',
+      firstName: 'Privileged',
+      lastName: 'Create',
+      department: department.id,
+      designation: 'Operations Lead',
+    };
+
+    const superAdminResponse = await request(ctx.app)
+      .post('/api/v1/auth/register')
+      .set(bearerHeader(ctx, admin))
+      .send({
+        ...basePayload,
+        role: 'superAdmin',
+      });
+
+    expect(superAdminResponse.status).toBe(403);
+    expect(superAdminResponse.body.message).toBe('HR Admin cannot create privileged accounts');
+    await expect(ctx.modules.UserModel.findOne({ email: basePayload.email }).lean()).resolves.toBeNull();
+
+    const customPermissionResponse = await request(ctx.app)
+      .post('/api/v1/auth/register')
+      .set(bearerHeader(ctx, admin))
+      .send({
+        ...basePayload,
+        email: 'custom.permissions@metalabstech.test',
+        role: 'employee',
+        permissions: ['payroll.approve'],
+      });
+
+    expect(customPermissionResponse.status).toBe(403);
+    expect(customPermissionResponse.body.message).toBe('Only the Super Admin can change permissions');
+    await expect(ctx.modules.UserModel.findOne({ email: 'custom.permissions@metalabstech.test' }).lean()).resolves.toBeNull();
+  });
+
   it('blocks self permission changes and privileged account management', async () => {
     const { user: superAdmin } = await createUserWithEmployee(ctx, {
       role: 'superAdmin',

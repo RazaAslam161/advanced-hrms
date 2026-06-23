@@ -180,7 +180,53 @@ export const generateTemporaryPassword = (): string => {
   return `Meta${segment.slice(0, 2).toUpperCase()}!${segment.slice(2)}9`;
 };
 
-export const resolveRolePermissions = (role: Role, permissions?: string[]) => (permissions?.length ? permissions : roleDefaults[role]);
+const privilegedRoles = new Set<Role>(['superAdmin', 'admin']);
+
+export const validatePermissionList = (permissions?: string[]): void => {
+  if (!permissions) {
+    return;
+  }
+
+  const permissionSet = new Set(allPermissions);
+  const invalidPermission = permissions.find((permission) => !permissionSet.has(permission));
+  if (invalidPermission) {
+    throw new AppError(`Invalid permission: ${invalidPermission}`, 422);
+  }
+};
+
+export const assertCanAssignUserAccess = (input: {
+  actorUserId?: string;
+  actorRole?: Role;
+  targetUserId?: string;
+  targetRole?: Role;
+  role?: Role;
+  permissions?: string[];
+  privilegedMessage?: string;
+}): void => {
+  validatePermissionList(input.permissions);
+
+  if (!input.actorRole) {
+    return;
+  }
+
+  const touchesPrivilegedRole =
+    (input.role ? privilegedRoles.has(input.role) : false) || (input.targetRole ? privilegedRoles.has(input.targetRole) : false);
+
+  if (input.actorRole === 'admin' && touchesPrivilegedRole) {
+    throw new AppError(input.privilegedMessage ?? 'HR Admin cannot manage privileged accounts', 403);
+  }
+
+  if ((input.role || input.permissions) && input.actorUserId && input.targetUserId && input.actorUserId === input.targetUserId) {
+    throw new AppError('You cannot change your own permissions', 400);
+  }
+
+  if (input.permissions && input.actorRole !== 'superAdmin') {
+    throw new AppError('Only the Super Admin can change permissions', 403);
+  }
+};
+
+export const resolveRolePermissions = (role: Role, permissions?: string[]) =>
+  permissions?.length ? Array.from(new Set(permissions)) : roleDefaults[role];
 
 const isJwtVerificationError = (error: unknown) =>
   error instanceof Error && ['JsonWebTokenError', 'TokenExpiredError', 'NotBeforeError'].includes(error.name);
@@ -365,7 +411,17 @@ export class AuthService {
     lastName: string;
     department?: string;
     designation?: string;
+    actorUserId?: string;
+    actorRole?: Role;
   }) {
+    assertCanAssignUserAccess({
+      actorUserId: input.actorUserId,
+      actorRole: input.actorRole,
+      role: input.role,
+      permissions: input.permissions,
+      privilegedMessage: 'HR Admin cannot create privileged accounts',
+    });
+
     const existing = await UserModel.findOne({ email: input.email.toLowerCase() });
     if (existing) {
       throw new AppError('A user with this email already exists', 409);
@@ -671,25 +727,13 @@ export class AuthService {
       throw new AppError('User not found', 404);
     }
 
-    if (actorRole === 'admin' && ['admin', 'superAdmin'].includes(user.role)) {
-      throw new AppError('HR Admin cannot manage privileged accounts', 403);
-    }
-
-    if (input.permissions) {
-      if (actorRole !== 'superAdmin') {
-        throw new AppError('Only the Super Admin can change permissions', 403);
-      }
-
-      if (actorUserId === user.id) {
-        throw new AppError('You cannot change your own permissions', 400);
-      }
-
-      const permissionSet = new Set(allPermissions);
-      const invalidPermission = input.permissions.find((permission) => !permissionSet.has(permission));
-      if (invalidPermission) {
-        throw new AppError(`Invalid permission: ${invalidPermission}`, 422);
-      }
-    }
+    assertCanAssignUserAccess({
+      actorUserId,
+      actorRole,
+      targetUserId: user.id,
+      targetRole: user.role,
+      permissions: input.permissions,
+    });
 
     let revokeSessions = false;
 
