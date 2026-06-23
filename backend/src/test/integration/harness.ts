@@ -9,6 +9,7 @@ interface LoadedModules {
   createApp: () => Express;
   connectDatabase: () => Promise<void>;
   AuthService: typeof import('../../modules/auth/service').AuthService;
+  ensureAdminAccount: typeof import('../../modules/auth/service').ensureAdminAccount;
   signAccessToken: typeof import('../../common/utils/jwt').signAccessToken;
   UserModel: typeof import('../../modules/auth/model').UserModel;
   AuthSessionModel: typeof import('../../modules/auth/model').AuthSessionModel;
@@ -56,6 +57,7 @@ const loadModules = async (): Promise<LoadedModules & { createApp: () => Express
     createApp: appModule.createApp,
     connectDatabase: dbModule.connectDatabase,
     AuthService: authServiceModule.AuthService,
+    ensureAdminAccount: authServiceModule.ensureAdminAccount,
     signAccessToken: jwtModule.signAccessToken,
     UserModel: authModelModule.UserModel,
     AuthSessionModel: authModelModule.AuthSessionModel,

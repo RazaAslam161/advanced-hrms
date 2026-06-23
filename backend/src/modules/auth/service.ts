@@ -11,6 +11,7 @@ import { AuthSessionModel, UserModel } from './model';
 import { logger } from '../../common/utils/logger';
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../../common/utils/jwt';
 import type { Role } from '../../common/constants/roles';
+import { env } from '../../config/env';
 import { EmployeeModel } from '../employee/model';
 import { EmployeeService } from '../employee/service';
 import { AuditLogModel } from '../analytics/model';
@@ -108,19 +109,31 @@ export const syncRolePermissions = async (): Promise<void> => {
   await UserModel.updateMany({ role: 'admin' }, { $addToSet: { permissions: 'performance.read' } });
 };
 
-// Boot-time safeguard: keep exactly ONE working admin login so nobody can get locked out.
-// Removes the legacy super-admin account, then ensures a single active admin whose
-// password is reset to a known value on every boot (so the login can never silently fail).
+// Boot-time safeguard: keep a single bootstrap admin available without overwriting
+// credentials that may already have been rotated by an operator.
 export const ADMIN_EMAIL = 'admin@metalabstech.com';
 export const ADMIN_PASSWORD = 'Meta@12345';
+
+const getBootstrapAdminPassword = (): string => {
+  if (env.BOOTSTRAP_ADMIN_PASSWORD) {
+    return env.BOOTSTRAP_ADMIN_PASSWORD;
+  }
+
+  if (env.NODE_ENV === 'production') {
+    throw new AppError('BOOTSTRAP_ADMIN_PASSWORD must be set before creating the bootstrap admin account', 500);
+  }
+
+  return ADMIN_PASSWORD;
+};
 
 export const ensureAdminAccount = async (): Promise<void> => {
   let user = await UserModel.findOne({ email: ADMIN_EMAIL });
   const existed = Boolean(user);
   if (!user) {
+    const password = getBootstrapAdminPassword();
     user = await UserModel.create({
       email: ADMIN_EMAIL,
-      password: await hashPassword(ADMIN_PASSWORD),
+      password: await hashPassword(password),
       role: 'superAdmin',
       permissions: resolveRolePermissions('superAdmin'),
       isActive: true,
@@ -128,17 +141,32 @@ export const ensureAdminAccount = async (): Promise<void> => {
       lastName: 'Admin',
     });
   } else {
-    user.password = await hashPassword(ADMIN_PASSWORD);
-    user.role = 'superAdmin';
-    user.permissions = resolveRolePermissions('superAdmin');
-    user.isActive = true;
-    user.tokenVersion += 1;
-    await user.save();
-    await AuthSessionModel.updateMany({ userId: user._id, revokedAt: { $exists: false } }, { revokedAt: new Date() });
+    let accessChanged = false;
+    const requiredPermissions = resolveRolePermissions('superAdmin');
+    if (user.role !== 'superAdmin') {
+      user.role = 'superAdmin';
+      accessChanged = true;
+    }
+    if (
+      user.permissions.length !== requiredPermissions.length ||
+      requiredPermissions.some((permission) => !user.permissions.includes(permission))
+    ) {
+      user.permissions = requiredPermissions;
+      accessChanged = true;
+    }
+    if (!user.isActive) {
+      user.isActive = true;
+      accessChanged = true;
+    }
+    if (accessChanged) {
+      user.tokenVersion += 1;
+      await user.save();
+      await AuthSessionModel.updateMany({ userId: user._id, revokedAt: { $exists: false } }, { revokedAt: new Date() });
+    }
   }
 
   logger.info(
-    `Admin account ready: ${ADMIN_EMAIL} (${existed ? 'password reset' : 'created'}), active=${user.isActive}, role=${user.role}`,
+    `Admin account ready: ${ADMIN_EMAIL} (${existed ? 'verified' : 'created'}), active=${user.isActive}, role=${user.role}`,
   );
 
   const employee = await EmployeeModel.findOne({ userId: user._id });

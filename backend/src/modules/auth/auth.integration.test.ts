@@ -4,6 +4,7 @@ import { bearerHeader, createAccessToken, loginAs } from '../../test/integration
 import { createDepartment, createUserWithEmployee } from '../../test/integration/factories';
 import { createIntegrationHarness } from '../../test/integration/harness';
 import * as auditUtils from '../../common/utils/audit';
+import { comparePassword, hashPassword } from '../../common/utils/password';
 
 describe('auth integration', () => {
   let ctx: IntegrationHarness;
@@ -45,6 +46,20 @@ describe('auth integration', () => {
 
     expect(failure.status).toBe(401);
     expect(failure.body.message).toBe('Invalid email or password');
+  });
+
+  it('does not reset an existing bootstrap admin password on startup', async () => {
+    await ctx.modules.ensureAdminAccount();
+    const admin = await ctx.modules.UserModel.findOne({ email: 'admin@metalabstech.com' }).orFail();
+
+    admin.password = await hashPassword('CustomMeta@12345');
+    await admin.save();
+
+    await ctx.modules.ensureAdminAccount();
+
+    const persistedAdmin = await ctx.modules.UserModel.findOne({ email: 'admin@metalabstech.com' }).orFail();
+    await expect(comparePassword('CustomMeta@12345', persistedAdmin.password)).resolves.toBe(true);
+    await expect(comparePassword('Meta@12345', persistedAdmin.password)).resolves.toBe(false);
   });
 
   it('rotates refresh tokens and invalidates the previous refresh token', async () => {
