@@ -36,6 +36,8 @@ describe('leave integration', () => {
       email: 'employee.portal@metalabstech.test',
       department: department.id,
     });
+    employeeAccount.employee.reportingTo = managerAccount.employee._id;
+    await employeeAccount.employee.save();
 
     const applyResponse = await request(ctx.app)
       .post('/api/v1/leave/apply')
@@ -87,6 +89,59 @@ describe('leave integration', () => {
     }).lean();
 
     expect(balanceAfterHrApproval?.used.casual).toBe(1);
+  });
+
+  it('blocks managers from approving or rejecting leave outside their direct reports', async () => {
+    const department = await createDepartment(ctx, { name: 'Engineering', code: 'ENG' });
+    const directManager = await createUserWithEmployee(ctx, {
+      role: 'manager',
+      email: 'direct.manager@metalabstech.test',
+      department: department.id,
+    });
+    const otherManager = await createUserWithEmployee(ctx, {
+      role: 'manager',
+      email: 'other.manager@metalabstech.test',
+      department: department.id,
+    });
+    const employeeAccount = await createUserWithEmployee(ctx, {
+      role: 'employee',
+      email: 'employee.scoped@metalabstech.test',
+      department: department.id,
+    });
+    employeeAccount.employee.reportingTo = directManager.employee._id;
+    await employeeAccount.employee.save();
+
+    const applyResponse = await request(ctx.app)
+      .post('/api/v1/leave/apply')
+      .set(bearerHeader(ctx, employeeAccount.user))
+      .send({
+        leaveType: 'casual',
+        startDate: '2026-04-27T09:00:00.000Z',
+        endDate: '2026-04-27T18:00:00.000Z',
+        halfDay: false,
+        reason: 'Family appointment',
+      });
+
+    expect(applyResponse.status).toBe(201);
+
+    const unauthorizedApproval = await request(ctx.app)
+      .patch(`/api/v1/leave/${applyResponse.body.data._id}/approve`)
+      .set(bearerHeader(ctx, otherManager.user))
+      .send({ status: 'approved' });
+
+    expect(unauthorizedApproval.status).toBe(403);
+    expect(unauthorizedApproval.body.message).toBe('You can only act on leave requests for your direct reports');
+
+    const unauthorizedRejection = await request(ctx.app)
+      .patch(`/api/v1/leave/${applyResponse.body.data._id}/approve`)
+      .set(bearerHeader(ctx, otherManager.user))
+      .send({ status: 'rejected', rejectionReason: 'Not on my team' });
+
+    expect(unauthorizedRejection.status).toBe(403);
+    expect(unauthorizedRejection.body.message).toBe('You can only act on leave requests for your direct reports');
+
+    const persistedRequest = await ctx.modules.LeaveRequestModel.findById(applyResponse.body.data._id).lean();
+    expect(persistedRequest?.status).toBe('pendingManager');
   });
 
   it('blocks super admin personal leave requests without an employee selection and keeps employee lists self-scoped', async () => {

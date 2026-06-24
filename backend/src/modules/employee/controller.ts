@@ -29,8 +29,8 @@ export const listEmployees = asyncHandler(async (req: AuthenticatedRequest, res:
   res.json(sendSuccess('Employees fetched successfully', result.items, result.pagination));
 });
 
-export const getEmployee = asyncHandler(async (req: Request, res: Response) => {
-  const employee = await EmployeeService.getById(String(req.params.id));
+export const getEmployee = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const employee = await EmployeeService.getById(String(req.params.id), req.user);
   res.json(sendSuccess('Employee fetched successfully', employee));
 });
 

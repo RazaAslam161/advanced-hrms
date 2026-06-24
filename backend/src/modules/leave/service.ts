@@ -65,6 +65,21 @@ const calculateRequestedDays = (startDate: Date, endDate: Date, halfDay: boolean
   return { days, sandwichApplied };
 };
 
+const ensureManagerOwnsLeaveRequest = async (requestEmployeeId: unknown, approverUserId: string) => {
+  const [employee, manager] = await Promise.all([
+    EmployeeModel.findById(requestEmployeeId).select('reportingTo').lean(),
+    EmployeeModel.findOne({ userId: approverUserId, isDeleted: false }).select('_id').lean(),
+  ]);
+
+  if (!manager) {
+    throw new AppError('Employee profile not found', 404);
+  }
+
+  if (!employee?.reportingTo || String(employee.reportingTo) !== String(manager._id)) {
+    throw new AppError('You can only act on leave requests for your direct reports', 403);
+  }
+};
+
 export class LeaveService {
   static async policies() {
     await ensurePolicies();
@@ -177,6 +192,19 @@ export class LeaveService {
     }
 
     if (decision.status === 'rejected') {
+      if (approver.role === 'manager') {
+        if (request.status !== 'pendingManager') {
+          throw new AppError('You cannot approve this request at its current stage', 400);
+        }
+        await ensureManagerOwnsLeaveRequest(request.employeeId, approver.userId);
+      } else if (
+        (approver.role === 'admin' || approver.role === 'superAdmin') &&
+        request.status !== 'pendingHR' &&
+        request.status !== 'pendingManager'
+      ) {
+        throw new AppError('You cannot approve this request at its current stage', 400);
+      }
+
       request.approvals = request.approvals ?? {};
       request.status = 'rejected';
       request.approvals.rejectedBy = request.approvals.rejectedBy ?? (approver.userId as never);
@@ -187,6 +215,7 @@ export class LeaveService {
     }
 
     if (approver.role === 'manager' && request.status === 'pendingManager') {
+      await ensureManagerOwnsLeaveRequest(request.employeeId, approver.userId);
       request.approvals = request.approvals ?? {};
       request.status = 'pendingHR';
       request.approvals.managerApprovedBy = approver.userId as never;

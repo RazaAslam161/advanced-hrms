@@ -134,6 +134,41 @@ describe('employee integration', () => {
     expect(persistedEmployee?.emergencyContacts).toHaveLength(1);
   });
 
+  it('scopes manager employee detail access to direct reports', async () => {
+    const department = await createDepartment(ctx, { name: 'Engineering', code: 'ENG' });
+    const managerAccount = await createUserWithEmployee(ctx, {
+      role: 'manager',
+      email: 'manager.scope@metalabstech.test',
+      department: department.id,
+    });
+    const directReport = await createUserWithEmployee(ctx, {
+      role: 'employee',
+      email: 'direct.report@metalabstech.test',
+      department: department.id,
+    });
+    const unrelatedEmployee = await createUserWithEmployee(ctx, {
+      role: 'employee',
+      email: 'unrelated.employee@metalabstech.test',
+      department: department.id,
+    });
+    directReport.employee.reportingTo = managerAccount.employee._id;
+    await directReport.employee.save();
+
+    const directReportResponse = await request(ctx.app)
+      .get(`/api/v1/employees/${directReport.employee.id}`)
+      .set(bearerHeader(ctx, managerAccount.user));
+
+    expect(directReportResponse.status).toBe(200);
+    expect(directReportResponse.body.data.employeeId).toBe(directReport.employee.employeeId);
+
+    const unrelatedResponse = await request(ctx.app)
+      .get(`/api/v1/employees/${unrelatedEmployee.employee.id}`)
+      .set(bearerHeader(ctx, managerAccount.user));
+
+    expect(unrelatedResponse.status).toBe(403);
+    expect(unrelatedResponse.body.message).toBe('You can only access employee profiles for your direct reports');
+  });
+
   it('stores public avatar URLs and private document URLs correctly', async () => {
     const department = await createDepartment(ctx, { name: 'QA', code: 'QAT' });
     const { user: admin } = await createUserWithEmployee(ctx, {
