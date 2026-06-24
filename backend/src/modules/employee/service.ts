@@ -12,6 +12,16 @@ import { generateTemporaryPassword, resolveRolePermissions } from '../auth/servi
 import { EmployeeActivityModel, EmployeeModel } from './model';
 import type { Role } from '../../common/constants/roles';
 
+const objectIdToString = (value: unknown): string | undefined => {
+  if (!value) {
+    return undefined;
+  }
+  if (typeof value === 'object' && '_id' in value) {
+    return String((value as { _id: unknown })._id);
+  }
+  return String(value);
+};
+
 const generateEmployeeId = async (): Promise<string> => {
   const year = new Date().getFullYear();
   const start = new Date(`${year}-01-01T00:00:00.000Z`);
@@ -222,7 +232,7 @@ export class EmployeeService {
     });
   }
 
-  static async getById(id: string) {
+  static async getById(id: string, requester?: { userId: string; role: string }) {
     const employee = await EmployeeModel.findOne({ _id: id, isDeleted: false })
       .populate('department', 'name code')
       .populate('reportingTo', 'employeeId firstName lastName designation')
@@ -231,6 +241,19 @@ export class EmployeeService {
 
     if (!employee) {
       throw new AppError('Employee not found', 404);
+    }
+
+    if (requester?.role === 'manager') {
+      const manager = await EmployeeModel.findOne({ userId: requester.userId, isDeleted: false }).select('_id').lean();
+      if (!manager) {
+        throw new AppError('Employee profile not found', 404);
+      }
+
+      const targetId = objectIdToString(employee._id);
+      const reportingToId = objectIdToString(employee.reportingTo);
+      if (targetId !== String(manager._id) && reportingToId !== String(manager._id)) {
+        throw new AppError('You can only access employee profiles for your direct reports', 403);
+      }
     }
 
     return employee;
