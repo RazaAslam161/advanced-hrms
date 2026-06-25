@@ -4,6 +4,8 @@ import type { IntegrationHarness } from '../../test/integration/harness';
 import { bearerHeader } from '../../test/integration/auth';
 import { createDepartment, createUserWithEmployee } from '../../test/integration/factories';
 import { createIntegrationHarness } from '../../test/integration/harness';
+import { createWorkbookBuffer } from '../../common/utils/excel';
+import { comparePassword } from '../../common/utils/password';
 
 const pngFixture = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+X2uoAAAAASUVORK5CYII=',
@@ -170,5 +172,100 @@ describe('employee integration', () => {
     expect(documentResponse.status).toBe(200);
     expect(documentResponse.body.data.documents[0].url).toMatch(/^\/api\/v1\/assets\//);
     expect(documentResponse.body.data.documents[0].key).toContain(path.posix.join('documents', ''));
+  });
+
+  it('bulk imports employees with unique temporary passwords instead of the shared default', async () => {
+    const { user: admin } = await createUserWithEmployee(ctx, {
+      role: 'admin',
+      email: 'hr.imports@metalabstech.test',
+    });
+    const emails = ['bulk.one@metalabstech.test', 'bulk.two@metalabstech.test'];
+    const workbookBuffer = await createWorkbookBuffer((workbook) => {
+      const sheet = workbook.addWorksheet('Employees');
+      sheet.addRow([
+        'First Name',
+        'Last Name',
+        'Email',
+        'Designation',
+        'Employment Type',
+        'Joining Date',
+        'Basic',
+        'House Rent',
+        'Medical',
+        'Transport',
+        'Currency',
+        'Bonus',
+        'Timezone',
+        'Work Location',
+        'Country',
+      ]);
+      sheet.addRow([
+        'Bulk',
+        'One',
+        emails[0],
+        'QA Analyst',
+        'full-time',
+        '2026-05-01T09:00:00.000Z',
+        100000,
+        0,
+        0,
+        0,
+        'PKR',
+        0,
+        'Asia/Karachi',
+        'onsite',
+        'Pakistan',
+      ]);
+      sheet.addRow([
+        'Bulk',
+        'Two',
+        emails[1],
+        'Support Analyst',
+        'full-time',
+        '2026-05-02T09:00:00.000Z',
+        100000,
+        0,
+        0,
+        0,
+        'PKR',
+        0,
+        'Asia/Karachi',
+        'onsite',
+        'Pakistan',
+      ]);
+    });
+
+    const response = await request(ctx.app)
+      .post('/api/v1/employees/bulk-import')
+      .set(bearerHeader(ctx, admin))
+      .attach('file', workbookBuffer, {
+        filename: 'employees.xlsx',
+        contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toMatchObject({ imported: 2, failed: 0 });
+    expect(response.body.data.credentials).toHaveLength(2);
+
+    const issuedPasswords = response.body.data.credentials.map(
+      (credential: { generatedPassword: string }) => credential.generatedPassword,
+    );
+    expect(new Set(issuedPasswords).size).toBe(2);
+
+    for (const credential of response.body.data.credentials as Array<{
+      email: string;
+      generatedPassword: string;
+      mustChangePassword: boolean;
+    }>) {
+      expect(emails).toContain(credential.email);
+      expect(credential.mustChangePassword).toBe(true);
+      expect(credential.generatedPassword).not.toBe('Meta@12345');
+
+      const user = await ctx.modules.UserModel.findOne({ email: credential.email }).orFail();
+      expect(user.mustChangePassword).toBe(true);
+      expect(user.tempPasswordIssuedAt).toEqual(expect.any(Date));
+      await expect(comparePassword('Meta@12345', user.password)).resolves.toBe(false);
+      await expect(comparePassword(credential.generatedPassword, user.password)).resolves.toBe(true);
+    }
   });
 });
