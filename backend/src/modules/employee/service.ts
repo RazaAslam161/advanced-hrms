@@ -456,6 +456,12 @@ export class EmployeeService {
 
     const rows = sheet.getRows(2, sheet.rowCount - 1) ?? [];
     const errors: Array<{ row: number; message: string }> = [];
+    const credentials: Array<{
+      email: string;
+      role: string;
+      generatedPassword: string;
+      mustChangePassword: boolean;
+    }> = [];
     let imported = 0;
 
     for (const row of rows) {
@@ -480,7 +486,6 @@ export class EmployeeService {
         status: 'active',
         emergencyContacts: [],
         skills: [],
-        password: 'Meta@12345',
       };
 
       if (!payload.firstName || !payload.lastName || !payload.email || !payload.designation) {
@@ -489,7 +494,15 @@ export class EmployeeService {
       }
 
       try {
-        await this.create(payload, actorId);
+        const result = await this.create(payload, actorId);
+        if (result.credentials.generatedPassword) {
+          credentials.push({
+            email: result.credentials.email,
+            role: result.credentials.role,
+            generatedPassword: result.credentials.generatedPassword,
+            mustChangePassword: result.credentials.mustChangePassword,
+          });
+        }
         imported += 1;
       } catch (error) {
         errors.push({ row: row.number, message: (error as Error).message });
@@ -513,6 +526,6 @@ export class EmployeeService {
       errorReportUrl = asset.url;
     }
 
-    return { imported, failed: errors.length, errors, errorReportUrl };
+    return { imported, failed: errors.length, errors, errorReportUrl, credentials };
   }
 }
