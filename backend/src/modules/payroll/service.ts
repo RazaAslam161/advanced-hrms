@@ -127,14 +127,15 @@ export class PayrollService {
       throw new AppError(`Payroll run already exists for ${month} ${payload.year}`, 409);
     }
 
-    let run: { id: string };
+    let payrollRunId: string;
     try {
-      run = await PayrollRunModel.create({
+      const run = await PayrollRunModel.create({
         ...payload,
         month,
         processedBy: actorId,
         status: 'draft',
       });
+      payrollRunId = String(run._id);
     } catch (error) {
       if (isDuplicateKeyError(error)) {
         throw new AppError(`Payroll run already exists for ${month} ${payload.year}`, 409);
@@ -142,11 +143,11 @@ export class PayrollService {
       throw error;
     }
 
-    await payrollQueue.add('process-payroll', { payrollRunId: run.id }, async ({ payrollRunId }) => {
+    await payrollQueue.add('process-payroll', { payrollRunId }, async ({ payrollRunId }) => {
       await processPayrollRun(payrollRunId);
     });
 
-    return PayrollRunModel.findById(run.id);
+    return PayrollRunModel.findById(payrollRunId);
   }
 
   static async approve(runId: string, actorId: string) {
