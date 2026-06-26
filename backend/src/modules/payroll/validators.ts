@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 export const payrollRunSchema = z.object({
-  month: z.string().min(3),
+  month: z.string().trim().min(3),
   year: z.number().min(2024),
   notes: z.string().optional(),
 });
