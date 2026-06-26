@@ -10,6 +10,9 @@ import { LoanAdvanceModel, PayrollRecordModel, PayrollRunModel } from './model';
 import { NotificationModel, NotificationPreferenceModel } from '../notification/model';
 import { UserModel } from '../auth/model';
 
+const isDuplicateKeyError = (error: unknown): error is { code: number } =>
+  typeof error === 'object' && error !== null && 'code' in error && (error as { code?: unknown }).code === 11000;
+
 export const processPayrollRun = async (payrollRunId: string): Promise<void> => {
   const run = await PayrollRunModel.findById(payrollRunId);
   if (!run) {
@@ -118,17 +121,33 @@ export class PayrollService {
   }
 
   static async process(payload: { month: string; year: number; notes?: string }, actorId: string) {
-    const run = await PayrollRunModel.create({
-      ...payload,
-      processedBy: actorId,
-      status: 'draft',
-    });
+    const month = payload.month.trim();
+    const existingRun = await PayrollRunModel.findOne({ month, year: payload.year }).select('_id').lean();
+    if (existingRun) {
+      throw new AppError(`Payroll run already exists for ${month} ${payload.year}`, 409);
+    }
 
-    await payrollQueue.add('process-payroll', { payrollRunId: run.id }, async ({ payrollRunId }) => {
+    let payrollRunId: string;
+    try {
+      const run = await PayrollRunModel.create({
+        ...payload,
+        month,
+        processedBy: actorId,
+        status: 'draft',
+      });
+      payrollRunId = String(run._id);
+    } catch (error) {
+      if (isDuplicateKeyError(error)) {
+        throw new AppError(`Payroll run already exists for ${month} ${payload.year}`, 409);
+      }
+      throw error;
+    }
+
+    await payrollQueue.add('process-payroll', { payrollRunId }, async ({ payrollRunId }) => {
       await processPayrollRun(payrollRunId);
     });
 
-    return PayrollRunModel.findById(run.id);
+    return PayrollRunModel.findById(payrollRunId);
   }
 
   static async approve(runId: string, actorId: string) {

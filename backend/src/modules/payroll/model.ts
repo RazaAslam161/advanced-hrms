@@ -17,6 +17,8 @@ const payrollRunSchema = new Schema(
   { timestamps: true },
 );
 
+payrollRunSchema.index({ month: 1, year: 1 }, { unique: true });
+
 const payrollRecordSchema = new Schema(
   {
     payrollRunId: { type: Schema.Types.ObjectId, ref: 'PayrollRun', required: true, index: true },

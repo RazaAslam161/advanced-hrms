@@ -65,6 +65,49 @@ describe('payroll integration', () => {
     expect(approvedRecords.every((record) => record.status === 'approved')).toBe(true);
   });
 
+  it('rejects duplicate payroll runs for the same month and year', async () => {
+    const department = await createDepartment(ctx, { name: 'Engineering', code: 'ENG' });
+    const adminAccount = await createUserWithEmployee(ctx, {
+      role: 'admin',
+      email: 'hr.portal@metalabstech.test',
+      department: department.id,
+    });
+    await createUserWithEmployee(ctx, {
+      role: 'employee',
+      email: 'employee.one@metalabstech.test',
+      department: department.id,
+    });
+
+    const firstRun = await request(ctx.app)
+      .post('/api/v1/payroll/process')
+      .set(bearerHeader(ctx, adminAccount.user))
+      .send({
+        month: 'July',
+        year: 2026,
+      });
+
+    expect(firstRun.status).toBe(201);
+
+    await request(ctx.app)
+      .patch(`/api/v1/payroll/runs/${firstRun.body.data._id}/approve`)
+      .set(bearerHeader(ctx, adminAccount.user))
+      .send({});
+
+    const duplicateRun = await request(ctx.app)
+      .post('/api/v1/payroll/process')
+      .set(bearerHeader(ctx, adminAccount.user))
+      .send({
+        month: 'July',
+        year: 2026,
+      });
+
+    expect(duplicateRun.status).toBe(409);
+    expect(duplicateRun.body.message).toBe('Payroll run already exists for July 2026');
+
+    const runs = await ctx.modules.PayrollRunModel.find({ month: 'July', year: 2026 }).lean();
+    expect(runs).toHaveLength(1);
+  });
+
   it('scopes payroll records to the employee and blocks payslip access to other employee records', async () => {
     const department = await createDepartment(ctx, { name: 'Engineering', code: 'ENG' });
     const adminAccount = await createUserWithEmployee(ctx, {
