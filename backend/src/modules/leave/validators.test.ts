@@ -44,6 +44,16 @@ describe('leave validators', () => {
       expect(result.success).toBe(false);
     });
 
+    it('rejects an endDate before the startDate', () => {
+      const result = leaveApplySchema.safeParse({
+        ...validPayload,
+        startDate: '2026-05-03T00:00:00.000Z',
+        endDate: '2026-05-01T00:00:00.000Z',
+      });
+
+      expect(result.success).toBe(false);
+    });
+
     it('accepts all valid leave types', () => {
       const types = ['casual', 'sick', 'annual', 'unpaid', 'maternity', 'paternity'] as const;
       for (const leaveType of types) {

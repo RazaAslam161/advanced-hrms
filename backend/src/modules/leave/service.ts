@@ -109,6 +109,10 @@ export class LeaveService {
 
     const startDate = new Date(payload.startDate);
     const endDate = new Date(payload.endDate);
+    if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime()) || endDate < startDate) {
+      throw new AppError('End date must be on or after start date', 400);
+    }
+
     const { days, sandwichApplied } = calculateRequestedDays(startDate, endDate, payload.halfDay);
     const balance = await ensureBalance(employee.id, getYear(startDate));
     const balances = balance.balances as Record<string, number>;
