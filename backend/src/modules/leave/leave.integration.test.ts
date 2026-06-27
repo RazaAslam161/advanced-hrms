@@ -150,4 +150,32 @@ describe('leave integration', () => {
     expect(employeeLeaveList.body.data).toHaveLength(1);
     expect(employeeLeaveList.body.data[0].employeeId.employeeId).toBe(firstEmployee.employee.employeeId);
   });
+
+  it('rejects reversed leave date ranges before creating a request', async () => {
+    const department = await createDepartment(ctx, { name: 'Support', code: 'SUP' });
+    const employeeAccount = await createUserWithEmployee(ctx, {
+      role: 'employee',
+      email: 'employee.reversed-leave@metalabstech.test',
+      department: department.id,
+    });
+
+    const response = await request(ctx.app)
+      .post('/api/v1/leave/apply')
+      .set(bearerHeader(ctx, employeeAccount.user))
+      .send({
+        leaveType: 'annual',
+        startDate: '2026-04-25T18:00:00.000Z',
+        endDate: '2026-04-24T09:00:00.000Z',
+        halfDay: false,
+        reason: 'Family obligation requiring travel',
+      });
+
+    expect(response.status).toBe(422);
+    expect(response.body.message).toBe('Validation failed');
+
+    const storedRequests = await ctx.modules.LeaveRequestModel.countDocuments({
+      employeeId: employeeAccount.employee._id,
+    });
+    expect(storedRequests).toBe(0);
+  });
 });
