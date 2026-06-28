@@ -1,4 +1,4 @@
-import { format } from 'date-fns';
+import { format, startOfDay } from 'date-fns';
 import request from 'supertest';
 import type { IntegrationHarness } from '../../test/integration/harness';
 import { bearerHeader } from '../../test/integration/auth';
@@ -148,6 +148,65 @@ describe('attendance integration', () => {
     expect(updateShift.status).toBe(200);
     expect(updateShift.body.data.gracePeriodMinutes).toBe(20);
     expect(updateShift.body.data.endTime).toBe('21:30');
+  });
+
+  it('scopes manager dashboard and monthly reports to their direct reports', async () => {
+    const managerAccount = await createUserWithEmployee(ctx, {
+      role: 'manager',
+      email: 'attendance.manager@metalabstech.test',
+    });
+    const directReportAccount = await createUserWithEmployee(ctx, {
+      role: 'employee',
+      email: 'attendance.direct@metalabstech.test',
+    });
+    const outsiderAccount = await createUserWithEmployee(ctx, {
+      role: 'employee',
+      email: 'attendance.outsider@metalabstech.test',
+    });
+
+    directReportAccount.employee.reportingTo = managerAccount.employee._id;
+    await directReportAccount.employee.save();
+
+    const today = startOfDay(new Date());
+    await ctx.modules.AttendanceRecordModel.create([
+      {
+        employeeId: directReportAccount.employee._id,
+        date: today,
+        checkIn: new Date(today.getTime() + 9 * 60 * 60 * 1000),
+        totalHours: 8,
+        status: 'present',
+      },
+      {
+        employeeId: outsiderAccount.employee._id,
+        date: today,
+        checkIn: new Date(today.getTime() + 10 * 60 * 60 * 1000),
+        totalHours: 7,
+        status: 'late',
+      },
+    ]);
+
+    const dashboardResponse = await request(ctx.app)
+      .get('/api/v1/attendance/dashboard')
+      .set(bearerHeader(ctx, managerAccount.user));
+
+    expect(dashboardResponse.status).toBe(200);
+    expect(dashboardResponse.body.data.live).toHaveLength(1);
+    expect(dashboardResponse.body.data.live[0].employee.employeeId).toBe(directReportAccount.employee.employeeId);
+
+    const directReportMonthly = await request(ctx.app)
+      .get(`/api/v1/attendance/monthly/${directReportAccount.employee.id}`)
+      .set(bearerHeader(ctx, managerAccount.user))
+      .query({ month: today.toISOString() });
+
+    expect(directReportMonthly.status).toBe(200);
+    expect(directReportMonthly.body.data).toHaveLength(1);
+
+    const outsiderMonthly = await request(ctx.app)
+      .get(`/api/v1/attendance/monthly/${outsiderAccount.employee.id}`)
+      .set(bearerHeader(ctx, managerAccount.user))
+      .query({ month: today.toISOString() });
+
+    expect(outsiderMonthly.status).toBe(403);
   });
 
   it('submits overtime against the caller attendance record and allows admin approval', async () => {

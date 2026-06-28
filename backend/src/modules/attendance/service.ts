@@ -43,6 +43,25 @@ const resolveDefaultShift = async () => {
   return shift;
 };
 
+const findActiveEmployeeIdForUser = async (userId: string) => {
+  const employee = await EmployeeModel.findOne({ userId, isDeleted: false }).select('_id');
+  if (!employee) {
+    throw new AppError('Employee profile not found', 404);
+  }
+
+  return employee.id;
+};
+
+const getManagerScopedEmployeeIds = async (userId: string) => {
+  const manager = await EmployeeModel.findOne({ userId, isDeleted: false }).select('_id');
+  if (!manager) {
+    throw new AppError('Employee profile not found', 404);
+  }
+
+  const team = await EmployeeModel.find({ reportingTo: manager._id, isDeleted: false }).select('_id');
+  return [manager.id, ...team.map((member) => member.id)];
+};
+
 export class AttendanceService {
   static async checkIn(userId: string, input: { lat: number; lng: number; timestamp: string }) {
     const employee = await EmployeeModel.findOne({ userId, isDeleted: false });
@@ -146,18 +165,9 @@ export class AttendanceService {
     let teamEmployeeIds: string[] | undefined;
 
     if (requester?.role === 'employee') {
-      const employee = await EmployeeModel.findOne({ userId: requester.userId, isDeleted: false }).select('_id');
-      if (!employee) {
-        throw new AppError('Employee profile not found', 404);
-      }
-      scopedEmployeeId = employee.id;
+      scopedEmployeeId = await findActiveEmployeeIdForUser(requester.userId);
     } else if (requester?.role === 'manager') {
-      const manager = await EmployeeModel.findOne({ userId: requester.userId, isDeleted: false }).select('_id');
-      if (!manager) {
-        throw new AppError('Employee profile not found', 404);
-      }
-      const team = await EmployeeModel.find({ reportingTo: manager._id, isDeleted: false }).select('_id');
-      teamEmployeeIds = [manager.id, ...team.map((member) => member.id)];
+      teamEmployeeIds = await getManagerScopedEmployeeIds(requester.userId);
     }
 
     const filter = {
@@ -199,10 +209,8 @@ export class AttendanceService {
     const defaultShift = await resolveDefaultShift();
 
     if (_requester?.role === 'employee') {
-      const employee = await EmployeeModel.findOne({ userId: _requester.userId, isDeleted: false }).select('_id employeeId firstName lastName');
-      if (!employee) {
-        throw new AppError('Employee profile not found', 404);
-      }
+      const scopedEmployeeId = await findActiveEmployeeIdForUser(_requester.userId);
+      const employee = await EmployeeModel.findById(scopedEmployeeId).select('_id employeeId firstName lastName').orFail();
 
       const today = startOfDay(new Date());
       const records = await AttendanceRecordModel.find({ date: today, employeeId: employee._id }).lean();
@@ -224,7 +232,9 @@ export class AttendanceService {
     }
 
     const today = startOfDay(new Date());
-    const records = await AttendanceRecordModel.find({ date: today }).populate('employeeId', 'employeeId firstName lastName').lean();
+    const employeeFilter =
+      _requester?.role === 'manager' ? { employeeId: { $in: await getManagerScopedEmployeeIds(_requester.userId) } } : {};
+    const records = await AttendanceRecordModel.find({ date: today, ...employeeFilter }).populate('employeeId', 'employeeId firstName lastName').lean();
     const inOffice = records.filter((item) => item.checkIn && !item.checkOut);
     const outOffice = records.filter((item) => item.checkOut);
     return {
@@ -246,11 +256,12 @@ export class AttendanceService {
   static async monthlyReport(employeeId: string, month: string, requester?: JwtUserPayload) {
     let scopedEmployeeId = employeeId;
     if (requester?.role === 'employee') {
-      const employee = await EmployeeModel.findOne({ userId: requester.userId, isDeleted: false }).select('_id');
-      if (!employee) {
-        throw new AppError('Employee profile not found', 404);
+      scopedEmployeeId = await findActiveEmployeeIdForUser(requester.userId);
+    } else if (requester?.role === 'manager') {
+      const teamEmployeeIds = await getManagerScopedEmployeeIds(requester.userId);
+      if (!teamEmployeeIds.includes(employeeId)) {
+        throw new AppError('You can only view attendance reports for your team', 403);
       }
-      scopedEmployeeId = employee.id;
     }
 
     const target = new Date(month);
