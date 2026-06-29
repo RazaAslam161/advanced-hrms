@@ -153,4 +153,65 @@ describe('payroll integration', () => {
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     );
   });
+
+  it('caps loan deductions to the outstanding balance and closes paid off loans', async () => {
+    const department = await createDepartment(ctx, { name: 'Engineering', code: 'ENG' });
+    const adminAccount = await createUserWithEmployee(ctx, {
+      role: 'admin',
+      email: 'hr.portal@metalabstech.test',
+      department: department.id,
+    });
+    const employeeAccount = await createUserWithEmployee(ctx, {
+      role: 'employee',
+      email: 'employee.loan@metalabstech.test',
+      department: department.id,
+    });
+
+    const loanResponse = await request(ctx.app)
+      .post('/api/v1/payroll/loan-advances')
+      .set(bearerHeader(ctx, adminAccount.user))
+      .send({
+        employeeId: employeeAccount.employee._id.toString(),
+        type: 'loan',
+        amount: 2500,
+        monthlyDeduction: 1000,
+      });
+
+    expect(loanResponse.status).toBe(201);
+
+    const processMonth = async (month: string) => {
+      const runResponse = await request(ctx.app)
+        .post('/api/v1/payroll/process')
+        .set(bearerHeader(ctx, adminAccount.user))
+        .send({
+          month,
+          year: 2027,
+        });
+
+      expect(runResponse.status).toBe(201);
+
+      return ctx.modules.PayrollRecordModel.findOne({
+        payrollRunId: runResponse.body.data._id,
+        employeeId: employeeAccount.employee._id,
+      })
+        .lean()
+        .orFail();
+    };
+
+    const januaryRecord = await processMonth('January');
+    expect(januaryRecord.salary?.loanDeduction).toBe(1000);
+
+    const februaryRecord = await processMonth('February');
+    expect(februaryRecord.salary?.loanDeduction).toBe(1000);
+
+    const marchRecord = await processMonth('March');
+    expect(marchRecord.salary?.loanDeduction).toBe(500);
+
+    const paidOffLoan = await ctx.modules.LoanAdvanceModel.findById(loanResponse.body.data._id).lean().orFail();
+    expect(paidOffLoan.outstandingAmount).toBe(0);
+    expect(paidOffLoan.status).toBe('closed');
+
+    const aprilRecord = await processMonth('April');
+    expect(aprilRecord.salary?.loanDeduction).toBe(0);
+  });
 });

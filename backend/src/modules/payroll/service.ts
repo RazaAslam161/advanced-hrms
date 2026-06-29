@@ -23,7 +23,11 @@ export const processPayrollRun = async (payrollRunId: string): Promise<void> => 
 
   for (const employee of employees) {
     const loanEntries = await LoanAdvanceModel.find({ employeeId: employee._id, status: 'active' });
-    const loanDeduction = loanEntries.reduce((total, item) => total + item.monthlyDeduction, 0);
+    const loanDeductions = loanEntries.map((item) => ({
+      loan: item,
+      amount: Math.min(item.monthlyDeduction, item.outstandingAmount),
+    }));
+    const loanDeduction = loanDeductions.reduce((total, item) => total + item.amount, 0);
     const country = employee.country === 'UAE' ? 'UAE' : 'Pakistan';
     const salary = employee.salary ?? {
       basic: 0,
@@ -61,6 +65,14 @@ export const processPayrollRun = async (payrollRunId: string): Promise<void> => 
       },
       { upsert: true, new: true },
     );
+
+    for (const { loan, amount } of loanDeductions) {
+      loan.outstandingAmount = Math.max(loan.outstandingAmount - amount, 0);
+      if (loan.outstandingAmount === 0) {
+        loan.status = 'closed';
+      }
+      await loan.save();
+    }
   }
 
   run.status = 'pendingApproval';
