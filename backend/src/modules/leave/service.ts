@@ -177,6 +177,10 @@ export class LeaveService {
     }
 
     if (decision.status === 'rejected') {
+      if (request.status !== 'pendingManager' && request.status !== 'pendingHR') {
+        throw new AppError('You cannot reject this request at its current stage', 400);
+      }
+
       request.approvals = request.approvals ?? {};
       request.status = 'rejected';
       request.approvals.rejectedBy = request.approvals.rejectedBy ?? (approver.userId as never);
