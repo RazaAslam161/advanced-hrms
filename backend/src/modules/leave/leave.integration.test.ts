@@ -89,6 +89,58 @@ describe('leave integration', () => {
     expect(balanceAfterHrApproval?.used.casual).toBe(1);
   });
 
+  it('does not allow approved leave to be rejected without restoring balance state', async () => {
+    const department = await createDepartment(ctx, { name: 'Operations', code: 'OPS' });
+    const adminAccount = await createUserWithEmployee(ctx, {
+      role: 'admin',
+      email: 'operations.hr@metalabstech.test',
+      department: department.id,
+    });
+    const employeeAccount = await createUserWithEmployee(ctx, {
+      role: 'employee',
+      email: 'operations.employee@metalabstech.test',
+      department: department.id,
+    });
+
+    const applyResponse = await request(ctx.app)
+      .post('/api/v1/leave/apply')
+      .set(bearerHeader(ctx, employeeAccount.user))
+      .send({
+        leaveType: 'casual',
+        startDate: '2026-05-04T09:00:00.000Z',
+        endDate: '2026-05-04T18:00:00.000Z',
+        halfDay: false,
+        reason: 'Family appointment for the day',
+      });
+
+    expect(applyResponse.status).toBe(201);
+
+    const approvalResponse = await request(ctx.app)
+      .patch(`/api/v1/leave/${applyResponse.body.data._id}/approve`)
+      .set(bearerHeader(ctx, adminAccount.user))
+      .send({ status: 'approved' });
+
+    expect(approvalResponse.status).toBe(200);
+    expect(approvalResponse.body.data.status).toBe('approved');
+
+    const rejectApprovedResponse = await request(ctx.app)
+      .patch(`/api/v1/leave/${applyResponse.body.data._id}/approve`)
+      .set(bearerHeader(ctx, adminAccount.user))
+      .send({ status: 'rejected', rejectionReason: 'Should not rewrite approved leave' });
+
+    expect(rejectApprovedResponse.status).toBe(400);
+    expect(rejectApprovedResponse.body.message).toBe('You cannot reject this request at its current stage');
+
+    const persistedRequest = await ctx.modules.LeaveRequestModel.findById(applyResponse.body.data._id).lean();
+    const balance = await ctx.modules.LeaveBalanceModel.findOne({
+      employeeId: employeeAccount.employee.id,
+      year: 2026,
+    }).lean();
+
+    expect(persistedRequest?.status).toBe('approved');
+    expect(balance?.used.casual).toBe(1);
+  });
+
   it('blocks super admin personal leave requests without an employee selection and keeps employee lists self-scoped', async () => {
     const department = await createDepartment(ctx, { name: 'HR', code: 'HRS' });
     const superAdminAccount = await createUserWithEmployee(ctx, {
