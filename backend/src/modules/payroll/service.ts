@@ -225,6 +225,14 @@ export class PayrollService {
   }
 
   static async generateBankFile(runId: string) {
+    const run = await PayrollRunModel.findById(runId).select('status').lean();
+    if (!run) {
+      throw new AppError('Payroll run not found', 404);
+    }
+    if (!['approved', 'completed'].includes(run.status)) {
+      throw new AppError('Payroll run must be approved before exporting bank file', 400);
+    }
+
     const records = await PayrollRecordModel.find({ payrollRunId: runId })
       .populate('employeeId', 'employeeId firstName lastName bankDetails country')
       .lean();

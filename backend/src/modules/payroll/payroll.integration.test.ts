@@ -153,4 +153,50 @@ describe('payroll integration', () => {
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     );
   });
+
+  it('blocks bank file export until the payroll run is approved', async () => {
+    const department = await createDepartment(ctx, { name: 'Engineering', code: 'ENG' });
+    const adminAccount = await createUserWithEmployee(ctx, {
+      role: 'admin',
+      email: 'payroll.admin@metalabstech.test',
+      department: department.id,
+    });
+    await createUserWithEmployee(ctx, {
+      role: 'employee',
+      email: 'payroll.employee@metalabstech.test',
+      department: department.id,
+    });
+
+    const runResponse = await request(ctx.app)
+      .post('/api/v1/payroll/process')
+      .set(bearerHeader(ctx, adminAccount.user))
+      .send({
+        month: 'July',
+        year: 2026,
+      });
+
+    expect(runResponse.status).toBe(201);
+
+    const pendingExport = await request(ctx.app)
+      .get(`/api/v1/payroll/runs/${runResponse.body.data._id}/bank-file`)
+      .set(bearerHeader(ctx, adminAccount.user));
+
+    expect(pendingExport.status).toBe(400);
+    expect(pendingExport.body.message).toBe('Payroll run must be approved before exporting bank file');
+
+    await request(ctx.app)
+      .patch(`/api/v1/payroll/runs/${runResponse.body.data._id}/approve`)
+      .set(bearerHeader(ctx, adminAccount.user))
+      .send({})
+      .expect(200);
+
+    const approvedExport = await request(ctx.app)
+      .get(`/api/v1/payroll/runs/${runResponse.body.data._id}/bank-file`)
+      .set(bearerHeader(ctx, adminAccount.user));
+
+    expect(approvedExport.status).toBe(200);
+    expect(approvedExport.headers['content-type']).toContain(
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+  });
 });
